@@ -16,6 +16,11 @@ namespace BrainUp.API.Hubs
         {
             await Clients.All.SendAsync("ReceiveAnswer", playerName, answer);
         }
+        // Enviado quando todos os jogadores responderam
+        public async Task AllPlayersAnswered()
+        {
+            await Clients.All.SendAsync("AllAnswered");
+        }
 
         // Enviado quando o jogo termina
         public async Task EndGame()
