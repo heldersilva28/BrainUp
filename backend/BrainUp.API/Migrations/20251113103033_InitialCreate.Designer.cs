@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace BrainUp.API.Migrations
 {
-    [DbContext(typeof(AppDbContext))]
+    [DbContext(typeof(BrainUpContext))]
     [Migration("20251113103033_InitialCreate")]
     partial class InitialCreate
     {
