@@ -3,16 +3,19 @@ import { useState } from "react";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
 
-const LoginPage: FC = () => {
+
+const RegisterPage: FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login:", { email, password });
-  };
+    console.log("Register:", { email, password });
+};
 
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const navigate = useNavigate();
 
@@ -52,7 +55,7 @@ const LoginPage: FC = () => {
           className="text-white/80 text-center mb-8 opacity-0 animate-fade-in-up"
           style={{ animationFillMode: "forwards", animationDelay: "0.4s" }}
         >
-          Faça login para continuar
+          Faça o registo para continuar
         </p>
 
         {/* Formulário */}
@@ -110,6 +113,50 @@ const LoginPage: FC = () => {
             </div>
           </div>
 
+          <div
+            className="flex flex-col opacity-0 animate-fade-in-up"
+            style={{ animationFillMode: "forwards", animationDelay: "0.8s" }}
+            >
+            <label className="text-white/80 mb-2" htmlFor="confirmPassword">
+                Confirmar Palavra-Passe
+            </label>
+
+            <div className="relative">
+                <input
+                type={showConfirmPassword ? "text" : "password"}
+                id="confirmPassword"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (e.target.value !== password) {
+                    e.target.setCustomValidity("As palavras-passe não coincidem!");
+                  } else {
+                    e.target.setCustomValidity("");
+                  }
+                }}
+                className="p-4 pr-12 rounded-xl w-full bg-white/20 text-white placeholder-white/50
+                            focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-1
+                            transition-all duration-300 hover:scale-105"
+                placeholder="********"
+                required
+                />
+
+                {/* Botão para mostrar/ocultar */}
+                <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)} // Usa o estado correto
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white
+                            transition-all duration-300 hover:scale-110 hover:animate-wiggle-short"
+                >
+                {showConfirmPassword ? (
+                    <EyeSlashIcon className="w-6 h-6" />
+                ) : (
+                    <EyeIcon className="w-6 h-6" />
+                )}
+                </button>
+            </div>
+          </div>
+
 
 
           <button
@@ -118,7 +165,7 @@ const LoginPage: FC = () => {
                         opacity-0 animate-fade-in-up transition-all duration-300 hover:shadow-yellow-400/50"
             style={{ animationFillMode: "forwards", animationDelay: "1s" }}
             >
-            ✨ Entrar
+            ✨ Registar
           </button>
 
 
@@ -129,10 +176,10 @@ const LoginPage: FC = () => {
           className="mt-6 text-white/70 text-center opacity-0 animate-fade-in-up"
           style={{ animationFillMode: "forwards", animationDelay: "1.2s" }}
         >
-          Não tem conta?{" "}
-          <span onClick={() => navigate("/register")}
+          Já tem Conta?{" "}
+          <span onClick={() => navigate("/login")}
           className="text-yellow-300 font-bold cursor-pointer hover:underline">
-            Registe-se
+            Inicie Sessão
           </span>
         </p>
       </div>
@@ -140,4 +187,4 @@ const LoginPage: FC = () => {
   );
 };
 
-export default LoginPage;
+export default RegisterPage;

@@ -61,7 +61,8 @@ const HomePage: FC = () => {
             <span className="relative text-2xl group-hover:animate-wiggle">👤</span>
             <span className="relative">Login</span>
           </button>
-          <button className="group relative bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-4 px-10 rounded-2xl shadow-2xl hover:shadow-yellow-400/50 hover:scale-110 hover:-translate-y-1 transition-all duration-300 ease-bounce-in flex items-center justify-center gap-2 overflow-hidden">
+          <button onClick={() => navigate("/register")}
+          className="group relative bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-4 px-10 rounded-2xl shadow-2xl hover:shadow-yellow-400/50 hover:scale-110 hover:-translate-y-1 transition-all duration-300 ease-bounce-in flex items-center justify-center gap-2 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-orange-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <span className="relative text-2xl group-hover:animate-wiggle">✨</span>
             <span className="relative">Criar Conta</span>
