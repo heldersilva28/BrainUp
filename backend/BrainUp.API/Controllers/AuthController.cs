@@ -1,19 +1,17 @@
 using BrainUp.API.DTOs;
 using BrainUp.API.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace BrainUp.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class AuthController : ControllerBase
+    public class AuthController(UserService userService) : ControllerBase
     {
-        private readonly UserService _userService;
-
-        public AuthController(UserService userService)
-        {
-            _userService = userService;
-        }
+        private readonly UserService _userService = userService;
 
         [HttpPost("register")]
         public async Task<IActionResult> Register(UserCreateDto dto)
@@ -36,5 +34,17 @@ namespace BrainUp.API.Controllers
 
             return Ok(new { token });
         }
+
+        [Authorize]
+        [HttpGet("me")]
+        public IActionResult Me()
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var email = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            var role = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value;
+
+            return Ok(new { userId, email, role });
+        }
+
     }
 }

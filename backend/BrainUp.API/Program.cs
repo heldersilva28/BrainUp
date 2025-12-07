@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using BrainUp.API.Services;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,19 +27,18 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend",
         policy =>
         {
-            policy.WithOrigins("http://localhost:5173") // URL do React (Vite)
+            policy.WithOrigins("http://localhost:5173")
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials();
         });
 });
 
+// JWT configuration
 var jwtKey = builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrWhiteSpace(jwtKey))
-{
-    throw new InvalidOperationException("JWT Key is not configured.");
-}
+throw new InvalidOperationException("JWT Key is not configured.");
 
 var key = Encoding.UTF8.GetBytes(jwtKey);
 
@@ -58,13 +58,43 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Add Swagger (para documentação da API)
+
+// Swagger with JWT support
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "BrainUp API", Version = "v1" });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Insira 'Bearer' seguido do seu token JWT"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 // Add SignalR
 builder.Services.AddSignalR();
 
+// Scoped services
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<JwtService>();
 
@@ -83,13 +113,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
-app.UseAuthorization();
-
-app.MapControllers();
-app.MapHub<GameHub>("/gamehub"); // (iremos criar o hub mais tarde)
-
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Map endpoints
+app.MapControllers();
+app.MapHub<GameHub>("/gamehub");
 
 app.Run();
