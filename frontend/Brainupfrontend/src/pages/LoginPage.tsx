@@ -110,17 +110,23 @@ const LoginPage: FC = () => {
             </div>
           </div>
 
-
-
-          <button
-            type="submit"
-            className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-4 px-6 rounded-2xl shadow-2xl flex items-center justify-center gap-2
-                        opacity-0 animate-fade-in-up transition-all duration-300 hover:shadow-yellow-400/50"
+          <div
+            className="opacity-0 animate-fade-in-up w-full"
             style={{ animationFillMode: "forwards", animationDelay: "1s" }}
+          >
+            <button
+              type="submit"
+              className="w-full group relative bg-gradient-to-r from-yellow-400 to-orange-500
+              text-white font-bold py-4 px-10 rounded-2xl shadow-2xl hover:shadow-yellow-400/50
+              hover:scale-105 hover:-translate-y-1 transition-all duration-300 ease-bounce-in
+              flex items-center justify-center gap-2 overflow-hidden"
             >
-            ✨ Entrar
-          </button>
-
+              <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-orange-400
+                opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <span className="relative text-2xl group-hover:animate-wiggle">✨</span>
+              <span className="relative">Entrar</span>
+            </button>
+          </div>
 
         </form>
 
