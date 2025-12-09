@@ -106,5 +106,94 @@ namespace BrainUp.API.Services
         {
             return HashPassword(password) == hash;
         }
+
+        // ---------------------------
+        // GET ALL USERS (ADMIN)
+        // ---------------------------
+        public async Task<List<UserDto>> GetAllUsersAsync()
+        {
+            return await _context.Users
+                .Include(u => u.Roles)
+                .Select(u => new UserDto
+                {
+                    Id = u.Id,
+                    Username = u.Username,
+                    Email = u.Email,
+                    CreatedAt = u.CreatedAt,
+                    Role = u.Roles.First().Name
+                })
+                .ToListAsync();
+        }
+
+        // ---------------------------
+        // GET USER BY ID
+        // ---------------------------
+        public async Task<UserDto?> GetUserByIdAsync(Guid id)
+        {
+            var user = await _context.Users
+                .Include(u => u.Roles)
+                .FirstOrDefaultAsync(u => u.Id == id);
+
+            if (user == null) return null;
+
+            return new UserDto
+            {
+                Id = user.Id,
+                Username = user.Username,
+                Email = user.Email,
+                CreatedAt = user.CreatedAt,
+                Role = user.Roles.First().Name
+            };
+        }
+
+        // ---------------------------
+        // UPDATE USER (username)
+        // ---------------------------
+        public async Task<bool> UpdateUserAsync(Guid id, UserDto updated)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return false;
+
+            user.Username = updated.Username;
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        // ---------------------------
+        // CHANGE USER ROLE (ADMIN ONLY)
+        // ---------------------------
+        public async Task<bool> ChangeRoleAsync(Guid userId, string newRole)
+        {
+            var user = await _context.Users
+                .Include(u => u.Roles)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null) return false;
+
+            var role = await _context.Roles.FirstOrDefaultAsync(r => r.Name == newRole);
+            if (role == null) return false;
+
+            user.Roles.Clear();    // garante apenas 1 role
+            user.Roles.Add(role);
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        // ---------------------------
+        // DELETE USER
+        // ---------------------------
+        public async Task<bool> DeleteUserAsync(Guid id)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return false;
+
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
     }
 }

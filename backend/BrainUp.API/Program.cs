@@ -97,6 +97,8 @@ builder.Services.AddSignalR();
 // Scoped services
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<QuestionTypeService>();
+builder.Services.AddScoped<QuestionService>();
 
 
 var app = builder.Build();
