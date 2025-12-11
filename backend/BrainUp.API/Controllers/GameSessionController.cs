@@ -1,0 +1,118 @@
+using BrainUp.API.DTOs.GameSessions;
+using BrainUp.API.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+
+namespace BrainUp.API.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class GameSessionController : ControllerBase
+    {
+        private readonly GameSessionService _service;
+
+        public GameSessionController(GameSessionService service)
+        {
+            _service = service;
+        }
+
+        private Guid GetUserId()
+        {
+            return Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        }
+
+        // -------------------------------------------------------
+        // CREATE SESSION
+        // -------------------------------------------------------
+        [HttpPost]
+        [Authorize]
+        public async Task<IActionResult> CreateSession([FromBody] GameSessionCreateDto dto)
+        {
+            var userId = GetUserId();
+
+            var session = await _service.CreateSession(userId, dto);
+
+            if (session == null)
+                return BadRequest("Quiz não encontrado.");
+
+            return Ok(session);
+        }
+
+        // -------------------------------------------------------
+        // JOIN SESSION
+        // -------------------------------------------------------
+        [HttpPost("{sessionId}/join")]
+        [AllowAnonymous] // qualquer jogador pode entrar só com nome
+        public async Task<IActionResult> JoinSession(Guid sessionId, [FromBody] JoinSessionDto dto)
+        {
+            var ok = await _service.JoinSession(sessionId, dto);
+
+            return ok
+                ? Ok("Jogador entrou na sessão.")
+                : BadRequest("Sessão não encontrada ou já terminou.");
+        }
+
+        // -------------------------------------------------------
+        // START ROUND (Host only)
+        // -------------------------------------------------------
+        [HttpPost("{sessionId}/round/start")]
+        [Authorize]
+        public async Task<IActionResult> StartRound(Guid sessionId, [FromBody] OpenRoundDto dto)
+        {
+            var userId = GetUserId();
+
+            // opcional: verificar se userId == HostId mais tarde
+
+            var round = await _service.StartRound(sessionId, dto);
+
+            if (round == null)
+                return BadRequest("Sessão inválida ou inativa.");
+
+            return Ok(round);
+        }
+
+        // -------------------------------------------------------
+        // SUBMIT ANSWER
+        // -------------------------------------------------------
+        [HttpPost("{sessionId}/round/{roundId}/answer/{playerId}")]
+        [AllowAnonymous] // jogadores externos podem responder
+        public async Task<IActionResult> SubmitAnswer(Guid sessionId, Guid roundId, Guid playerId,
+            [FromBody] SubmitAnswerDto dto)
+        {
+            var ok = await _service.SubmitAnswer(roundId, playerId, dto);
+
+            return ok
+                ? Ok("Resposta registada.")
+                : BadRequest("Falha ao registar resposta.");
+        }
+
+        // -------------------------------------------------------
+        // END SESSION (Host)
+        // -------------------------------------------------------
+        [HttpPost("{sessionId}/end")]
+        [Authorize]
+        public async Task<IActionResult> EndSession(Guid sessionId)
+        {
+            var ok = await _service.EndSession(sessionId);
+
+            return ok
+                ? Ok("Sessão terminada.")
+                : BadRequest("Sessão não encontrada.");
+        }
+
+        // -------------------------------------------------------
+        // LEADERBOARD
+        // -------------------------------------------------------
+        [HttpGet("{sessionId}/leaderboard")]
+        [Authorize]
+        public async Task<IActionResult> GetLeaderboard(Guid sessionId)
+        {
+            var board = await _service.GetLeaderboard(sessionId);
+
+            return board == null
+                ? NotFound("Sessão não encontrada.")
+                : Ok(board);
+        }
+    }
+}

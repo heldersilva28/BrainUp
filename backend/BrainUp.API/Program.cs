@@ -99,6 +99,8 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<QuestionTypeService>();
 builder.Services.AddScoped<QuestionService>();
+builder.Services.AddScoped<QuizService>();
+builder.Services.AddScoped<GameSessionService>();
 
 
 var app = builder.Build();
