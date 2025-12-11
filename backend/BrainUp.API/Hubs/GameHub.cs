@@ -1,31 +1,67 @@
 using Microsoft.AspNetCore.SignalR;
-using System.Threading.Tasks;
 
 namespace BrainUp.API.Hubs
 {
     public class GameHub : Hub
     {
-        // Enviado quando um jogador entra
-        public async Task JoinGame(string playerName)
+        // --------------------------------------------
+        // HOST CRIA OU ENTRA NA SALA
+        // --------------------------------------------
+        public async Task JoinHost(string sessionId)
         {
-            await Clients.All.SendAsync("PlayerJoined", playerName);
+            await Groups.AddToGroupAsync(Context.ConnectionId, sessionId);
+            await Clients.Group(sessionId).SendAsync("HostJoined");
         }
 
-        // Enviado quando um jogador responde a uma pergunta
-        public async Task SendAnswer(string playerName, string answer)
+        // --------------------------------------------
+        // PLAYER ENTRA NA SALA
+        // --------------------------------------------
+        public async Task JoinPlayer(string sessionId, string playerId, string playerName)
         {
-            await Clients.All.SendAsync("ReceiveAnswer", playerName, answer);
-        }
-        // Enviado quando todos os jogadores responderam
-        public async Task AllPlayersAnswered()
-        {
-            await Clients.All.SendAsync("AllAnswered");
+            await Groups.AddToGroupAsync(Context.ConnectionId, sessionId);
+
+            await Clients.Group(sessionId).SendAsync("PlayerJoined", new
+            {
+                PlayerId = playerId,
+                PlayerName = playerName
+            });
         }
 
-        // Enviado quando o jogo termina
-        public async Task EndGame()
+        // --------------------------------------------
+        // HOST INICIA PRÓXIMA PERGUNTA
+        // --------------------------------------------
+        public async Task StartRound(string sessionId, int roundNumber, Guid questionId)
         {
-            await Clients.All.SendAsync("GameEnded");
+            await Clients.Group(sessionId).SendAsync("RoundStarted", new
+            {
+                RoundNumber = roundNumber,
+                QuestionId = questionId
+            });
+        }
+
+        // --------------------------------------------
+        // PLAYER RESPONDE
+        // --------------------------------------------
+        public async Task PlayerAnswered(string sessionId, string playerId)
+        {
+            // Host recebe número de respostas em tempo real
+            await Clients.Group(sessionId).SendAsync("PlayerAnswered", playerId);
+        }
+
+        // --------------------------------------------
+        // HOST TERMINA A RONDA
+        // --------------------------------------------
+        public async Task EndRound(string sessionId)
+        {
+            await Clients.Group(sessionId).SendAsync("RoundEnded");
+        }
+
+        // --------------------------------------------
+        // HOST TERMINA A SESSÃO
+        // --------------------------------------------
+        public async Task EndSession(string sessionId)
+        {
+            await Clients.Group(sessionId).SendAsync("SessionEnded");
         }
     }
 }
