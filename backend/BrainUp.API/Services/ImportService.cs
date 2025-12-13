@@ -7,16 +7,10 @@ using System.Security.Claims;
 
 namespace BrainUp.API.Services
 {
-    public class ImportService
+    public class ImportService(BrainUpContext context, IHttpContextAccessor http)
     {
-        private readonly BrainUpContext _context;
-        private readonly IHttpContextAccessor _http;
-
-        public ImportService(BrainUpContext context, IHttpContextAccessor http)
-        {
-            _context = context;
-            _http = http;
-        }
+        private readonly BrainUpContext _context = context;
+        private readonly IHttpContextAccessor _http = http;
 
         // -------------------------------------------------------
         // JSON IMPORT
