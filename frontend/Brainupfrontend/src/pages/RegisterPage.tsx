@@ -2,11 +2,16 @@ import type { FC } from "react";
 import { useState } from "react";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const RegisterPage: FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const apiBaseUrl =
+    import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5027";
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -14,9 +19,39 @@ const RegisterPage: FC = () => {
   const navigate = useNavigate();
   const [userType, setUserType] = useState("aluno");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Register:", { email, password });
+    setError(null);
+
+    if (password !== confirmPassword) {
+      setError("As palavras-passe nao coincidem.");
+      return;
+    }
+
+    const normalizedEmail = email.trim();
+
+    try {
+      setIsSubmitting(true);
+      await axios.post(`${apiBaseUrl}/api/auth/register`, {
+        username: normalizedEmail,
+        email: normalizedEmail,
+        password,
+        roleId: 0,
+      });
+      navigate("/login");
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const message =
+          typeof err.response?.data === "string"
+            ? err.response.data
+            : "Registo falhou.";
+        setError(message);
+      } else {
+        setError("Registo falhou.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -61,6 +96,10 @@ const RegisterPage: FC = () => {
         </p>
 
         {/* Formulário */}
+        {error && (
+          <p className="text-red-200 text-center text-sm mb-2">{error}</p>
+        )}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
 
           {/*ZONA COM SCROLL (apenas os campos) */}
@@ -189,15 +228,18 @@ const RegisterPage: FC = () => {
           >
             <button
               type="submit"
+              disabled={isSubmitting}
               className="w-full group relative bg-gradient-to-r from-yellow-400 to-orange-500
                          text-white font-bold py-4 px-10 rounded-2xl shadow-2xl hover:shadow-yellow-400/50
                          hover:scale-105 hover:-translate-y-1 transition-all duration-300 ease-bounce-in
-                         flex items-center justify-center gap-2 overflow-hidden"
+                         flex items-center justify-center gap-2 overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-orange-400
                               opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <span className="relative text-2xl group-hover:animate-wiggle">✨</span>
-              <span className="relative">Registar</span>
+              <span className="relative">
+                {isSubmitting ? "A registar..." : "Registar"}
+              </span>
             </button>
           </div>
         </form>

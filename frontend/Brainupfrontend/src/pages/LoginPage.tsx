@@ -2,14 +2,48 @@ import type { FC } from "react";
 import { useState } from "react";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const LoginPage: FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const apiBaseUrl =
+    import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5027";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login:", { email, password });
+    setError(null);
+
+    try {
+      setIsSubmitting(true);
+      const response = await axios.post(`${apiBaseUrl}/api/auth/login`, {
+        email,
+        password,
+      });
+
+      const token = response.data?.token;
+      if (!token) {
+        setError("Login falhou. Token em falta.");
+        return;
+      }
+
+      sessionStorage.setItem("brainup_token", token);
+      navigate("/");
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const message =
+          typeof err.response?.data === "string"
+            ? err.response.data
+            : "Login falhou.";
+        setError(message);
+      } else {
+        setError("Login falhou.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const [showPassword, setShowPassword] = useState(false);
@@ -56,6 +90,10 @@ const LoginPage: FC = () => {
         </p>
 
         {/* Formulário */}
+        {error && (
+          <p className="text-red-200 text-center text-sm mb-2">{error}</p>
+        )}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <div
             className="flex flex-col opacity-0 animate-fade-in-up"
@@ -116,15 +154,18 @@ const LoginPage: FC = () => {
           >
             <button
               type="submit"
+              disabled={isSubmitting}
               className="w-full group relative bg-gradient-to-r from-yellow-400 to-orange-500
               text-white font-bold py-4 px-10 rounded-2xl shadow-2xl hover:shadow-yellow-400/50
               hover:scale-105 hover:-translate-y-1 transition-all duration-300 ease-bounce-in
-              flex items-center justify-center gap-2 overflow-hidden"
+              flex items-center justify-center gap-2 overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-orange-400
                 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <span className="relative text-2xl group-hover:animate-wiggle">✨</span>
-              <span className="relative">Entrar</span>
+              <span className="relative">
+                {isSubmitting ? "A entrar..." : "Entrar"}
+              </span>
             </button>
           </div>
 
