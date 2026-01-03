@@ -30,7 +30,7 @@ const LoginPage: FC = () => {
       }
 
       sessionStorage.setItem("brainup_token", token);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const message =

@@ -1,0 +1,345 @@
+import type { FC } from "react";
+import { useState } from "react";
+
+const DashboardPage: FC = () => {
+  const [activeSection, setActiveSection] = useState<"projects" | "sessions">(
+    "projects"
+  );
+  const [activeProjectTab, setActiveProjectTab] = useState<
+    "import" | "create" | "library"
+  >("import");
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
+      <div className="flex min-h-screen w-full gap-6 px-4 py-8">
+        <aside className="w-72 shrink-0 rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
+          <div className="mb-8">
+            <div className="text-xs uppercase tracking-[0.3em] text-white/60">
+              BrainUp
+            </div>
+            <h1 className="text-2xl font-black">Dashboard</h1>
+          </div>
+
+          <div className="mb-8">
+            <p className="text-sm font-semibold text-white/80">Navegacao</p>
+            <div className="mt-3 space-y-2">
+              <button
+                type="button"
+                onClick={() => setActiveSection("sessions")}
+                className={`w-full rounded-2xl px-4 py-3 text-left font-semibold transition ${
+                  activeSection === "sessions"
+                    ? "bg-white/20 shadow-lg"
+                    : "border border-white/30 hover:bg-white/10"
+                }`}
+              >
+                Sessão
+                <span className="mt-1 block text-xs text-white/60">
+                  Entrar e criar sessões
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection("projects")}
+                className={`w-full rounded-2xl px-4 py-3 text-left font-semibold transition ${
+                  activeSection === "projects"
+                    ? "bg-white/20 shadow-lg"
+                    : "border border-white/30 hover:bg-white/10"
+                }`}
+              >
+                Projetos
+                <span className="mt-1 block text-xs text-white/60">
+                  Pastas e quizzes
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-white/80">Ações</p>
+            <div className="mt-3 space-y-2">
+              {activeSection === "sessions" ? (
+                <>
+                  <button className="w-full rounded-xl bg-white/20 px-3 py-2 text-left text-sm font-semibold text-white transition hover:bg-white/30">
+                    Entrar ou Criar sessão
+                  </button>
+                 
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveProjectTab("create")}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                      activeProjectTab === "create"
+                        ? "bg-white/20 text-white shadow-sm"
+                        : "text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Criar quiz
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveProjectTab("import")}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                      activeProjectTab === "import"
+                        ? "bg-white/20 text-white shadow-sm"
+                        : "text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Importar quiz
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveProjectTab("library")}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                      activeProjectTab === "library"
+                        ? "bg-white/20 text-white shadow-sm"
+                        : "text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Biblioteca
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <main className="flex-1 space-y-6">
+          {activeSection === "sessions" ? (
+            <>
+              <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+                <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
+                  <div>
+                    <h2 className="text-xl font-bold">Entrar em sessão</h2>
+                    <p className="text-sm text-white/70">
+                      Usa o codigo fornecido pelo host
+                    </p>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    <input
+                      type="text"
+                      placeholder="Codigo da sessão"
+                      className="w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                    />
+                    <button className="w-full rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
+                      Entrar
+                    </button>
+                  </div>
+
+                  <div className="mt-6 rounded-2xl border border-white/20 bg-white/5 p-4">
+                    <p className="text-sm font-semibold">Dica</p>
+                    <p className="mt-2 text-xs text-white/70">
+                      Tambem podes guardar o codigo para voltar a entrar mais
+                      tarde.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
+                  <div>
+                    <h2 className="text-xl font-bold">Criar sessão</h2>
+                    <p className="text-sm text-white/70">
+                      Escolhe um quiz e define a duração
+                    </p>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+                        Quiz
+                      </p>
+                      <div className="mt-2 rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
+                        Selecionar quiz
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+                        Tempo
+                      </p>
+                      <div className="mt-2 rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
+                        20 minutos
+                      </div>
+                    </div>
+                    <button className="w-full rounded-2xl border border-white/40 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
+                      Criar sessão
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </>
+          ) : (
+            <>
+              <section className="grid gap-6 lg:grid-cols-[1.1fr_1.5fr]">
+                <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold">Pastas</h2>
+                      <p className="text-sm text-white/70">
+                        Cria uma pasta por disciplina ou tema
+                      </p>
+                    </div>
+                    <button className="rounded-xl bg-white/20 px-4 py-2 text-sm font-semibold transition hover:bg-white/30">
+                      Nova pasta
+                    </button>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    {[
+                      { name: "Matematica", detail: "4 quizzes" },
+                      { name: "Historia", detail: "2 quizzes" },
+                      { name: "Programacao", detail: "6 quizzes" },
+                    ].map((folder, index) => (
+                      <button
+                        key={folder.name}
+                        className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
+                          index === 0
+                            ? "border-white/40 bg-white/20 shadow-lg"
+                            : "border-white/15 bg-white/5 hover:bg-white/10"
+                        }`}
+                      >
+                        <div className="text-base font-semibold">
+                          {folder.name}
+                        </div>
+                        <p className="text-xs text-white/60">{folder.detail}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
+                  {activeProjectTab === "import" && (
+                    <>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h2 className="text-xl font-bold">Importar quiz</h2>
+                          <p className="text-sm text-white/70">
+                            Pasta atual: Matematica
+                          </p>
+                        </div>
+                        <button className="rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10">
+                          Criar quiz
+                        </button>
+                      </div>
+
+                      <div className="mt-6 rounded-3xl border border-dashed border-white/40 bg-white/5 p-8 text-center">
+                        <p className="text-base font-semibold">
+                          Larga ficheiros aqui para importar
+                        </p>
+                        <p className="mt-2 text-sm text-white/70">
+                          Escolhe um ficheiro JSON ou CSV dentro da pasta
+                        </p>
+                        <button className="mt-6 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
+                          Selecionar ficheiro
+                        </button>
+                      </div>
+
+                      <div className="mt-6 rounded-2xl border border-white/20 bg-white/5 p-4">
+                        <p className="text-sm font-semibold">Sugestao de fluxo</p>
+                        <p className="mt-2 text-xs text-white/70">
+                          1. Cria a pasta do tema. 2. Entra na pasta. 3. Importa
+                          o quiz para manter tudo organizado.
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {activeProjectTab === "create" && (
+                    <>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h2 className="text-xl font-bold">Criar quiz</h2>
+                          <p className="text-sm text-white/70">
+                            Pasta atual: Matematica
+                          </p>
+                        </div>
+                        <button className="rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10">
+                          Guardar rascunho
+                        </button>
+                      </div>
+
+                      <div className="mt-6 space-y-4">
+                        <input
+                          type="text"
+                          placeholder="Nome do quiz"
+                          className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                        />
+                        <textarea
+                          placeholder="Descricao curta"
+                          rows={3}
+                          className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                        />
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
+                            Nivel: Intermedio
+                          </div>
+                          <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
+                            Perguntas: 12
+                          </div>
+                        </div>
+                        <button className="w-full rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
+                          Criar quiz
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {activeProjectTab === "library" && (
+                    <>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h2 className="text-xl font-bold">Biblioteca</h2>
+                          <p className="text-sm text-white/70">
+                            Quizzes da pasta: Matematica
+                          </p>
+                        </div>
+                        <button className="rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10">
+                          Novo quiz
+                        </button>
+                      </div>
+
+                      <div className="mt-6">
+                        <input
+                          type="text"
+                          placeholder="Pesquisar quiz"
+                          className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                        />
+                      </div>
+
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        {[
+                          { name: "Equacoes basicas", detail: "10 perguntas" },
+                          { name: "Revolucao Francesa", detail: "8 perguntas" },
+                          { name: "JavaScript rapido", detail: "12 perguntas" },
+                          { name: "Fisica do movimento", detail: "14 perguntas" },
+                        ].map((quiz) => (
+                          <div
+                            key={quiz.name}
+                            className="rounded-2xl border border-white/20 bg-white/10 p-4"
+                          >
+                            <div className="text-sm font-semibold">
+                              {quiz.name}
+                            </div>
+                            <p className="mt-1 text-xs text-white/60">
+                              {quiz.detail}
+                            </p>
+                            <button className="mt-3 rounded-xl bg-white/20 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/30">
+                              Abrir
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default DashboardPage;
