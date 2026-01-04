@@ -21,6 +21,52 @@ const DashboardPage: FC = () => {
   const filteredQuizzes = allQuizzes.filter(quiz =>
     quiz.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const apiBaseUrl =
+    import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5027";
+
+// 🔐 Fetch com Bearer Token
+  const authFetch = (url: string, options: RequestInit = {}) => {
+    const token = sessionStorage.getItem("brainup_token");
+
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  };
+
+  const [uploadStatus, setUploadStatus] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'loading' | null;
+  }>({ message: '', type: null });
+
+  const uploadFile = (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setUploadStatus({ message: 'A carregar ficheiro...', type: 'loading' });
+
+    authFetch(`${apiBaseUrl}/api/Import/questions`, {
+      method: "POST",
+      body: formData,
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Erro no upload");
+        return res.json();
+      })
+      .then((data) => {
+        console.log("Upload feito com sucesso:", data);
+        setUploadStatus({ message: 'Ficheiro carregado com sucesso!', type: 'success' });
+        setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+      })
+      .catch((err) => {
+        console.error("Falha no upload:", err);
+        setUploadStatus({ message: 'Erro ao carregar ficheiro. Tenta novamente.', type: 'error' });
+        setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+      });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
@@ -209,7 +255,7 @@ const DashboardPage: FC = () => {
                     { name: "Matematica", detail: "4 quizzes" },
                     { name: "Historia", detail: "2 quizzes" },
                     { name: "Programacao", detail: "6 quizzes" },
-                  ].map((folder, index) => (
+                  ].map((folder) => (
                     <button
                     key={folder.name}
                     onClick={() => setActiveFolder(folder.name)}
@@ -229,8 +275,8 @@ const DashboardPage: FC = () => {
                 </div>
 
                 <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
-                  {activeProjectTab === "import" && (
-                  <>
+                    {activeProjectTab === "import" && (
+                    <>
                     <div className="flex items-start justify-between">
                     <div>
                       <h2 className="text-xl font-bold">Importar quiz</h2>
@@ -240,17 +286,60 @@ const DashboardPage: FC = () => {
                     </div>
                     </div>
 
-                    <div className="mt-6 rounded-3xl border border-dashed border-white/40 bg-white/5 p-8 text-center">
+                    <div 
+                      className="mt-6 rounded-3xl border border-dashed border-white/40 bg-white/5 p-8 text-center transition-colors hover:bg-white/10"
+                      onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add('border-yellow-400');
+                      }}
+                      onDragLeave={(e) => {
+                      e.currentTarget.classList.remove('border-yellow-400');
+                      }}
+                      onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-yellow-400');
+                      const files = e.dataTransfer.files;
+                      if (files.length > 0) {
+                        uploadFile(files[0]); 
+                      }
+                      }}
+                    >
                     <p className="text-base font-semibold">
                       Larga ficheiros aqui para importar
                     </p>
                     <p className="mt-2 text-sm text-white/70">
                       Escolhe um ficheiro JSON ou CSV dentro da pasta
                     </p>
-                    <button className="mt-6 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
-                      Selecionar ficheiro
+                    <input
+                      type="file"
+                      accept=".json,.csv"
+                      className="hidden"
+                      id="file-input"
+                      onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadFile(file);
+                      }}
+                    />
+                    <button 
+                      className="mt-6 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105"
+                      onClick={() => document.getElementById('file-input')?.click()}
+                      disabled={uploadStatus.type === 'loading'}
+                    >
+                      {uploadStatus.type === 'loading' ? 'A carregar...' : 'Selecionar ficheiro'}
                     </button>
                     </div>
+
+                    {uploadStatus.message && (
+                      <div className={`mt-4 rounded-2xl border p-4 ${
+                        uploadStatus.type === 'success' 
+                          ? 'border-green-400/40 bg-green-400/10 text-green-400'
+                          : uploadStatus.type === 'error'
+                          ? 'border-red-400/40 bg-red-400/10 text-red-400'
+                          : 'border-yellow-400/40 bg-yellow-400/10 text-yellow-400'
+                      }`}>
+                        <p className="text-sm font-semibold">{uploadStatus.message}</p>
+                      </div>
+                    )}
 
                     <div className="mt-6 rounded-2xl border border-white/20 bg-white/5 p-4">
                     <p className="text-sm font-semibold">Sugestao de fluxo</p>
@@ -259,8 +348,8 @@ const DashboardPage: FC = () => {
                       o quiz para manter tudo organizado.
                     </p>
                     </div>
-                  </>
-                  )}
+                    </>
+                    )}
 
                   {activeProjectTab === "create" && (
                   <>
