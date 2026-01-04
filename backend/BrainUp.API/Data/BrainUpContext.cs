@@ -16,6 +16,8 @@ public partial class BrainUpContext : DbContext
     {
     }
 
+    public virtual DbSet<Folder> Folders { get; set; }
+
     public virtual DbSet<GameRound> GameRounds { get; set; }
 
     public virtual DbSet<GameSession> GameSessions { get; set; }
@@ -47,11 +49,32 @@ protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         // A connection string virá do Program.cs
     }
 }
-
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("pgcrypto");
+
+        modelBuilder.Entity<Folder>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("pk_folders");
+
+            entity.ToTable("folders");
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Name)
+                .HasMaxLength(100)
+                .HasColumnName("name");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+
+            entity.HasOne(d => d.User).WithMany(p => p.Folders)
+                .HasForeignKey(d => d.UserId)
+                .HasConstraintName("fk_folders_users");
+        });
 
         modelBuilder.Entity<GameRound>(entity =>
         {
@@ -252,6 +275,7 @@ protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
             entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.FolderId).HasColumnName("folder_id");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
                 .HasColumnName("title");
@@ -259,6 +283,11 @@ protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
             entity.HasOne(d => d.Author).WithMany(p => p.Quizzes)
                 .HasForeignKey(d => d.AuthorId)
                 .HasConstraintName("quizzes_author_id_fkey");
+
+            entity.HasOne(d => d.Folder).WithMany(p => p.Quizzes)
+                .HasForeignKey(d => d.FolderId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_quizzes_folders");
         });
 
         modelBuilder.Entity<QuizQuestion>(entity =>
@@ -333,7 +362,6 @@ protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
                 .HasColumnName("id");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
-                .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
             entity.Property(e => e.Email)
                 .HasMaxLength(255)

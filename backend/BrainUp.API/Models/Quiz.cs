@@ -15,7 +15,11 @@ public partial class Quiz
 
     public DateTime CreatedAt { get; set; }
 
+    public Guid? FolderId { get; set; }
+
     public virtual User? Author { get; set; }
+
+    public virtual Folder? Folder { get; set; }
 
     public virtual ICollection<GameSession> GameSessions { get; set; } = new List<GameSession>();
 

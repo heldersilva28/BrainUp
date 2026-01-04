@@ -15,6 +15,8 @@ public partial class User
 
     public DateTime CreatedAt { get; set; }
 
+    public virtual ICollection<Folder> Folders { get; set; } = new List<Folder>();
+
     public virtual ICollection<GameSession> GameSessions { get; set; } = new List<GameSession>();
 
     public virtual ICollection<Question> Questions { get; set; } = new List<Question>();
