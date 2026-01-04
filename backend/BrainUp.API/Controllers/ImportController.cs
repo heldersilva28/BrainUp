@@ -20,7 +20,7 @@ namespace BrainUp.API.Controllers
         public async Task<IActionResult> ImportQuestions(IFormFile file, Guid? quizId = null)
         {
             if (file == null || file.Length == 0)
-                return BadRequest("Ficheiro inválido");
+                return BadRequest(new { error = "Ficheiro inválido" });
 
             var extension = Path.GetExtension(file.FileName).ToLower();
 
@@ -36,14 +36,17 @@ namespace BrainUp.API.Controllers
                 };
 
                 if (!result)
-                    return BadRequest("O ficheiro não contém perguntas válidas.");
+                    return BadRequest(new { error = "O ficheiro não contém perguntas válidas." });
 
-                return Ok("Importação concluída com sucesso.");
+                return Ok(new { message = "Importação concluída com sucesso." });
             }
             catch (Exception ex)
             {
-                // devolve a mensagem de erro real
-                return BadRequest($"Erro ao importar: {ex.Message}");
+                return StatusCode(500, new
+                {
+                    error = "Erro ao importar ficheiro",
+                    details = ex.Message
+                });
             }
         }
     }
