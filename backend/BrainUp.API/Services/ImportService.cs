@@ -15,7 +15,7 @@ namespace BrainUp.API.Services
         // -------------------------------------------------------
         // JSON IMPORT
         // -------------------------------------------------------
-        public async Task<bool> ImportJsonAsync(Stream stream, Guid? quizId)
+        public async Task<bool> ImportJsonAsync(Stream stream, Guid? quizId, Guid? folderId)
         {
             using var reader = new StreamReader(stream);
             var json = await reader.ReadToEndAsync();
@@ -36,7 +36,8 @@ namespace BrainUp.API.Services
                     Title = $"Imported Quiz - {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}",
                     Description = "Criado automaticamente durante importação",
                     CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
-                    AuthorId = userId
+                    AuthorId = userId,
+                    FolderId = folderId
                 };
 
                 _context.Quizzes.Add(newQuiz);
@@ -71,7 +72,7 @@ namespace BrainUp.API.Services
         // -------------------------------------------------------
         // GIFT IMPORT
         // -------------------------------------------------------
-        public async Task<bool> ImportGiftAsync(Stream stream, Guid? quizId)
+        public async Task<bool> ImportGiftAsync(Stream stream, Guid? quizId, Guid? folderId)
         {
             using var reader = new StreamReader(stream);
             string content = await reader.ReadToEndAsync();
@@ -88,7 +89,8 @@ namespace BrainUp.API.Services
                     Title = $"Imported GIFT Quiz - {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}",
                     Description = "Criado automaticamente durante importação GIFT",
                     CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
-                    AuthorId = userId
+                    AuthorId = userId,
+                    FolderId = folderId
                 };
 
                 _context.Quizzes.Add(newQuiz);

@@ -17,7 +17,7 @@ namespace BrainUp.API.Controllers
 
         [HttpPost("questions")]
         [Authorize]
-        public async Task<IActionResult> ImportQuestions(IFormFile file, Guid? quizId = null)
+        public async Task<IActionResult> ImportQuestions(IFormFile file, Guid? quizId = null,Guid? folderId = null)
         {
             if (file == null || file.Length == 0)
                 return BadRequest(new { error = "Ficheiro inválido" });
@@ -30,8 +30,8 @@ namespace BrainUp.API.Controllers
 
                 bool result = extension switch
                 {
-                    ".json" => await _importService.ImportJsonAsync(stream, quizId),
-                    ".gift" => await _importService.ImportGiftAsync(stream, quizId),
+                    ".json" => await _importService.ImportJsonAsync(stream, quizId, folderId),
+                    ".gift" => await _importService.ImportGiftAsync(stream, quizId, folderId),
                     _ => throw new Exception("Apenas .json ou .gift são suportados.")
                 };
 
