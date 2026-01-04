@@ -102,6 +102,7 @@ builder.Services.AddScoped<QuestionService>();
 builder.Services.AddScoped<QuizService>();
 builder.Services.AddScoped<GameSessionService>();
 builder.Services.AddScoped<ImportService>();
+builder.Services.AddScoped<FolderService>();
 
 builder.Services.AddHttpContextAccessor();
 
