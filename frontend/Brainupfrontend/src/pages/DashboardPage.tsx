@@ -8,6 +8,19 @@ const DashboardPage: FC = () => {
   const [activeProjectTab, setActiveProjectTab] = useState<
     "import" | "create" | "library"
   >("import");
+  const [activeFolder, setActiveFolder] = useState<string>("Matematica");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  const allQuizzes = [
+    { name: "Equações básicas", detail: "10 perguntas • Matemática" },
+    { name: "Revolução Francesa", detail: "15 perguntas • História" },
+    { name: "JavaScript rápido", detail: "8 perguntas • Programação" },
+    { name: "Física do movimento", detail: "12 perguntas • Matemática" },
+  ];
+
+  const filteredQuizzes = allQuizzes.filter(quiz =>
+    quiz.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
@@ -150,17 +163,23 @@ const DashboardPage: FC = () => {
                       <p className="text-xs uppercase tracking-[0.2em] text-white/60">
                         Quiz
                       </p>
-                      <div className="mt-2 rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
-                        Selecionar quiz
-                      </div>
+                        <select className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-300">
+                        <option value="">Selecionar quiz</option>
+                        <option value="equacoes">Equações básicas</option>
+                        <option value="revolucao">Revolução Francesa</option>
+                        <option value="javascript">JavaScript rápido</option>
+                        <option value="fisica">Física do movimento</option>
+                        </select>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-white/60">
-                        Tempo
+                      Tempo
                       </p>
-                      <div className="mt-2 rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
-                        20 minutos
-                      </div>
+                      <input
+                      type="number"
+                      placeholder="Duração em minutos"
+                      className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                      />
                     </div>
                     <button className="w-full rounded-2xl border border-white/40 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
                       Criar sessão
@@ -171,169 +190,158 @@ const DashboardPage: FC = () => {
             </>
           ) : (
             <>
-              <section className="grid gap-6 lg:grid-cols-[1.1fr_1.5fr]">
+                <section className="grid gap-6 lg:grid-cols-[1.1fr_1.5fr]">
                 <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-xl font-bold">Pastas</h2>
-                      <p className="text-sm text-white/70">
-                        Cria uma pasta por disciplina ou tema
-                      </p>
-                    </div>
-                    <button className="rounded-xl bg-white/20 px-4 py-2 text-sm font-semibold transition hover:bg-white/30">
-                      Nova pasta
-                    </button>
+                  <div>
+                    <h2 className="text-xl font-bold">Pastas</h2>
+                    <p className="text-sm text-white/70">
+                    Cria uma pasta por disciplina ou tema
+                    </p>
+                  </div>
+                  <button className="rounded-xl bg-white/20 px-4 py-2 text-sm font-semibold transition hover:bg-white/30">
+                    Nova pasta
+                  </button>
                   </div>
 
                   <div className="mt-6 space-y-4">
-                    {[
-                      { name: "Matematica", detail: "4 quizzes" },
-                      { name: "Historia", detail: "2 quizzes" },
-                      { name: "Programacao", detail: "6 quizzes" },
-                    ].map((folder, index) => (
-                      <button
-                        key={folder.name}
-                        className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
-                          index === 0
-                            ? "border-white/40 bg-white/20 shadow-lg"
-                            : "border-white/15 bg-white/5 hover:bg-white/10"
-                        }`}
-                      >
-                        <div className="text-base font-semibold">
-                          {folder.name}
-                        </div>
-                        <p className="text-xs text-white/60">{folder.detail}</p>
-                      </button>
-                    ))}
+                  {[
+                    { name: "Matematica", detail: "4 quizzes" },
+                    { name: "Historia", detail: "2 quizzes" },
+                    { name: "Programacao", detail: "6 quizzes" },
+                  ].map((folder, index) => (
+                    <button
+                    key={folder.name}
+                    onClick={() => setActiveFolder(folder.name)}
+                    className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
+                      activeFolder === folder.name
+                      ? "border-white/40 bg-white/20 shadow-lg"
+                      : "border-white/15 bg-white/5 hover:bg-white/10"
+                    }`}
+                    >
+                    <div className="text-base font-semibold">
+                      {folder.name}
+                    </div>
+                    <p className="text-xs text-white/60">{folder.detail}</p>
+                    </button>
+                  ))}
                   </div>
                 </div>
 
                 <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
                   {activeProjectTab === "import" && (
-                    <>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h2 className="text-xl font-bold">Importar quiz</h2>
-                          <p className="text-sm text-white/70">
-                            Pasta atual: Matematica
-                          </p>
-                        </div>
-                        <button className="rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10">
-                          Criar quiz
-                        </button>
-                      </div>
+                  <>
+                    <div className="flex items-start justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold">Importar quiz</h2>
+                      <p className="text-sm text-white/70">
+                      Pasta atual: {activeFolder}
+                      </p>
+                    </div>
+                    </div>
 
-                      <div className="mt-6 rounded-3xl border border-dashed border-white/40 bg-white/5 p-8 text-center">
-                        <p className="text-base font-semibold">
-                          Larga ficheiros aqui para importar
-                        </p>
-                        <p className="mt-2 text-sm text-white/70">
-                          Escolhe um ficheiro JSON ou CSV dentro da pasta
-                        </p>
-                        <button className="mt-6 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
-                          Selecionar ficheiro
-                        </button>
-                      </div>
+                    <div className="mt-6 rounded-3xl border border-dashed border-white/40 bg-white/5 p-8 text-center">
+                    <p className="text-base font-semibold">
+                      Larga ficheiros aqui para importar
+                    </p>
+                    <p className="mt-2 text-sm text-white/70">
+                      Escolhe um ficheiro JSON ou CSV dentro da pasta
+                    </p>
+                    <button className="mt-6 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
+                      Selecionar ficheiro
+                    </button>
+                    </div>
 
-                      <div className="mt-6 rounded-2xl border border-white/20 bg-white/5 p-4">
-                        <p className="text-sm font-semibold">Sugestao de fluxo</p>
-                        <p className="mt-2 text-xs text-white/70">
-                          1. Cria a pasta do tema. 2. Entra na pasta. 3. Importa
-                          o quiz para manter tudo organizado.
-                        </p>
-                      </div>
-                    </>
+                    <div className="mt-6 rounded-2xl border border-white/20 bg-white/5 p-4">
+                    <p className="text-sm font-semibold">Sugestao de fluxo</p>
+                    <p className="mt-2 text-xs text-white/70">
+                      1. Cria a pasta do tema. 2. Entra na pasta. 3. Importa
+                      o quiz para manter tudo organizado.
+                    </p>
+                    </div>
+                  </>
                   )}
 
                   {activeProjectTab === "create" && (
-                    <>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h2 className="text-xl font-bold">Criar quiz</h2>
-                          <p className="text-sm text-white/70">
-                            Pasta atual: Matematica
-                          </p>
-                        </div>
-                        <button className="rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10">
-                          Guardar rascunho
-                        </button>
-                      </div>
+                  <>
+                    <div className="flex items-start justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold">Criar quiz</h2>
+                      <p className="text-sm text-white/70">
+                      Pasta atual: {activeFolder}
+                      </p>
+                    </div>
+                    </div>
 
-                      <div className="mt-6 space-y-4">
-                        <input
-                          type="text"
-                          placeholder="Nome do quiz"
-                          className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                        />
-                        <textarea
-                          placeholder="Descricao curta"
-                          rows={3}
-                          className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                        />
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
-                            Nivel: Intermedio
-                          </div>
-                          <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
-                            Perguntas: 12
-                          </div>
-                        </div>
-                        <button className="w-full rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
-                          Criar quiz
-                        </button>
+                    <div className="mt-6 space-y-4">
+                    <input
+                      type="text"
+                      placeholder="Nome do quiz"
+                      className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                    />
+                    <textarea
+                      placeholder="Descricao curta"
+                      rows={3}
+                      className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
+                      Nivel: Intermedio
                       </div>
-                    </>
+                      <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
+                      Perguntas: 12
+                      </div>
+                    </div>
+                    <button className="w-full rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
+                      Criar quiz
+                    </button>
+                    </div>
+                  </>
                   )}
 
                   {activeProjectTab === "library" && (
-                    <>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h2 className="text-xl font-bold">Biblioteca</h2>
-                          <p className="text-sm text-white/70">
-                            Quizzes da pasta: Matematica
-                          </p>
-                        </div>
-                        <button className="rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10">
-                          Novo quiz
-                        </button>
-                      </div>
+                  <>
+                    <div className="flex items-start justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold">Biblioteca</h2>
+                      <p className="text-sm text-white/70">
+                      Quizzes da pasta: {activeFolder}
+                      </p>
+                    </div>
+                    </div>
 
-                      <div className="mt-6">
-                        <input
-                          type="text"
-                          placeholder="Pesquisar quiz"
-                          className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                        />
-                      </div>
+                    <div className="mt-6">
+                    <input
+                      type="text"
+                      placeholder="Pesquisar quiz"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                    />
+                    </div>
 
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        {[
-                          { name: "Equacoes basicas", detail: "10 perguntas" },
-                          { name: "Revolucao Francesa", detail: "8 perguntas" },
-                          { name: "JavaScript rapido", detail: "12 perguntas" },
-                          { name: "Fisica do movimento", detail: "14 perguntas" },
-                        ].map((quiz) => (
-                          <div
-                            key={quiz.name}
-                            className="rounded-2xl border border-white/20 bg-white/10 p-4"
-                          >
-                            <div className="text-sm font-semibold">
-                              {quiz.name}
-                            </div>
-                            <p className="mt-1 text-xs text-white/60">
-                              {quiz.detail}
-                            </p>
-                            <button className="mt-3 rounded-xl bg-white/20 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/30">
-                              Abrir
-                            </button>
-                          </div>
-                        ))}
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    {filteredQuizzes.map((quiz) => (
+                      <div
+                      key={quiz.name}
+                      className="rounded-2xl border border-white/20 bg-white/10 p-4"
+                      >
+                      <div className="text-sm font-semibold">
+                        {quiz.name}
                       </div>
-                    </>
+                      <p className="mt-1 text-xs text-white/60">
+                        {quiz.detail}
+                      </p>
+                      <button className="mt-3 rounded-xl bg-white/20 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/30">
+                        Abrir
+                      </button>
+                      </div>
+                    ))}
+                    </div>
+                  </>
                   )}
                 </div>
-              </section>
+                </section>
             </>
           )}
         </main>
