@@ -73,9 +73,13 @@ namespace BrainUp.API.Controllers
         public async Task<IActionResult> DeleteQuiz(Guid id)
         {
             var userId = GetUserId();
+            
+            // Remove all questions associated with the quiz first
+            await _service.RemoveAllQuestionsFromQuiz(id, userId);
+            
             var success = await _service.DeleteQuiz(id, userId);
 
-            return success ? Ok("Quiz removido.") : NotFound("Quiz não encontrado ou não pertence a este utilizador.");
+            return success ? Ok("Quiz e todas as questões removidos.") : NotFound("Quiz não encontrado ou não pertence a este utilizador.");
         }
 
         // -------------------------------------------------------

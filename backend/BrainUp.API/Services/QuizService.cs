@@ -198,5 +198,38 @@ namespace BrainUp.API.Services
             await _context.SaveChangesAsync();
             return true;
         }
+
+        public async Task<bool> RemoveAllQuestionsFromQuiz(Guid quizId, Guid authorId)
+        {
+            var quiz = await _context.Quizzes
+            .FirstOrDefaultAsync(q => q.Id == quizId && q.AuthorId == authorId);
+
+            if (quiz == null)
+            return false;
+
+            // Get all question IDs for this quiz
+            var questionIds = await _context.QuizQuestions
+            .Where(qq => qq.QuizId == quizId)
+            .Select(qq => qq.QuestionId)
+            .ToListAsync();
+
+            if (!questionIds.Any())
+            return true;
+
+            // Remove in correct order to avoid FK constraint issues
+            await _context.QuestionOptions
+            .Where(qo => qo.QuestionId.HasValue && questionIds.Contains(qo.QuestionId.Value))
+            .ExecuteDeleteAsync();
+
+            await _context.QuizQuestions
+            .Where(qq => qq.QuizId == quizId)
+            .ExecuteDeleteAsync();
+
+            await _context.Questions
+            .Where(q => questionIds.Contains(q.Id))
+            .ExecuteDeleteAsync();
+
+            return true;
+        }
     }
 }
