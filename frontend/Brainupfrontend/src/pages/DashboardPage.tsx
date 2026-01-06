@@ -1,7 +1,9 @@
 import type { FC } from "react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const DashboardPage: FC = () => {
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<"projects" | "sessions">(
     "projects"
   );
@@ -118,7 +120,7 @@ const DashboardPage: FC = () => {
             <div className="mt-3 space-y-2">
               {activeSection === "sessions" ? (
                 <>
-                  <button className="w-full rounded-xl bg-white/20 px-3 py-2 text-left text-sm font-semibold text-white transition hover:bg-white/30">
+                  <button type="button" onClick={() => navigate("/session")} className="w-full rounded-xl bg-white/20 px-3 py-2 text-left text-sm font-semibold text-white transition hover:bg-white/30">
                     Entrar ou Criar sessão
                   </button>
                  
@@ -227,7 +229,7 @@ const DashboardPage: FC = () => {
                       className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
                       />
                     </div>
-                    <button className="w-full rounded-2xl border border-white/40 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
+                    <button type="button" onClick={() => navigate("/session")} className="w-full rounded-2xl border border-white/40 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
                       Criar sessão
                     </button>
                   </div>
