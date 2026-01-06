@@ -29,6 +29,7 @@ const RegisterPage: FC = () => {
     }
 
     const normalizedEmail = email.trim();
+    const roleId = userType === "professor" ? 2 : 3;
 
     try {
       setIsSubmitting(true);
@@ -36,7 +37,7 @@ const RegisterPage: FC = () => {
         username: normalizedEmail,
         email: normalizedEmail,
         password,
-        roleId: 0,
+        roleId: roleId,
       });
       navigate("/login");
     } catch (err) {
