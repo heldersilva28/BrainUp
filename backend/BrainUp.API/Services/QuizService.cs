@@ -52,7 +52,8 @@ namespace BrainUp.API.Services
                 Title = quiz.Title,
                 Description = quiz.Description,
                 AuthorId = quiz.AuthorId,
-                CreatedAt = quiz.CreatedAt
+                CreatedAt = quiz.CreatedAt,
+                QuestionsCount = await _context.QuizQuestions.CountAsync(qq => qq.QuizId == quiz.Id)
             };
         }
 
@@ -70,7 +71,8 @@ namespace BrainUp.API.Services
                     Title = q.Title,
                     Description = q.Description,
                     AuthorId = q.AuthorId,
-                    CreatedAt = q.CreatedAt
+                    CreatedAt = q.CreatedAt,
+                    QuestionsCount = _context.QuizQuestions.Count(qq => qq.QuizId == q.Id)
                 })
                 .ToListAsync();
         }
@@ -205,7 +207,7 @@ namespace BrainUp.API.Services
             .FirstOrDefaultAsync(q => q.Id == quizId && q.AuthorId == authorId);
 
             if (quiz == null)
-            return false;
+                return false;
 
             // Get all question IDs for this quiz
             var questionIds = await _context.QuizQuestions
@@ -214,7 +216,7 @@ namespace BrainUp.API.Services
             .ToListAsync();
 
             if (!questionIds.Any())
-            return true;
+                return true;
 
             // Remove in correct order to avoid FK constraint issues
             await _context.QuestionOptions
@@ -230,6 +232,12 @@ namespace BrainUp.API.Services
             .ExecuteDeleteAsync();
 
             return true;
+        }
+        
+        public async Task<int> GetQuestionCountInQuiz(Guid quizId)
+        {
+            return await _context.QuizQuestions
+                .CountAsync(qq => qq.QuizId == quizId);
         }
     }
 }

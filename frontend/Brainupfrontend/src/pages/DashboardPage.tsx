@@ -1,6 +1,23 @@
 import type { FC } from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+
+interface Folder {
+  id: string;
+  name: string;
+  userId: string;
+  createdAt: string;
+  quizCount: number;
+}
+
+interface Quiz {
+  id: string;
+  title: string;
+  description: string;
+  authorId: string;
+  createdAt: string;
+  questionsCount: number;
+}
 
 const DashboardPage: FC = () => {
   const navigate = useNavigate();
@@ -8,10 +25,34 @@ const DashboardPage: FC = () => {
     "projects"
   );
   const [activeProjectTab, setActiveProjectTab] = useState<
-    "import" | "create" | "library"
+    "import" | "library"
   >("import");
-  const [activeFolder, setActiveFolder] = useState<string>("Matematica");
+  const [activeFolder, setActiveFolder] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [editingFolderId, setEditingFolderId] = useState<string>("");
+  const [editingFolderName, setEditingFolderName] = useState("");
+  const [deletingFolderId, setDeleteingFolderId] = useState<string>("");
+  const [deletingFolderName, setDeletingFolderName] = useState("");
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(false);
+  const [showDeleteQuizModal, setShowDeleteQuizModal] = useState(false);
+  const [deletingQuizId, setDeletingQuizId] = useState<string>("");
+  const [deletingQuizName, setDeletingQuizName] = useState("");
+  const [showEditQuizModal, setShowEditQuizModal] = useState(false);
+  const [editingQuizId, setEditingQuizId] = useState<string>("");
+  const [editingQuizTitle, setEditingQuizTitle] = useState("");
+  const [editingQuizDescription, setEditingQuizDescription] = useState("");
+
+  const [sessionFolder, setSessionFolder] = useState<string>("");
+  const [sessionQuiz, setSessionQuiz] = useState<string>("");
+  const [sessionQuizzes, setSessionQuizzes] = useState<Quiz[]>([]);
+  const [sessionQuizzesLoading, setSessionQuizzesLoading] = useState(false);
 
   const allQuizzes = [
     { name: "Equações básicas", detail: "10 perguntas • Matemática" },
@@ -20,13 +61,12 @@ const DashboardPage: FC = () => {
     { name: "Física do movimento", detail: "12 perguntas • Matemática" },
   ];
 
-  const filteredQuizzes = allQuizzes.filter(quiz =>
-    quiz.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredQuizzes = quizzes.filter(quiz =>
+    quiz.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const apiBaseUrl =
     import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5027";
 
-// 🔐 Fetch com Bearer Token
   const authFetch = (url: string, options: RequestInit = {}) => {
     const token = sessionStorage.getItem("brainup_token");
 
@@ -44,13 +84,230 @@ const DashboardPage: FC = () => {
     type: 'success' | 'error' | 'loading' | null;
   }>({ message: '', type: null });
 
+  useEffect(() => {
+    fetchFolders();
+  }, []);
+
+  useEffect(() => {
+    if (activeFolder && activeProjectTab === "library") {
+      fetchQuizzes();
+    }
+  }, [activeFolder, activeProjectTab]);
+
+  useEffect(() => {
+    if (sessionFolder) {
+      fetchSessionQuizzes();
+    } else {
+      setSessionQuizzes([]);
+      setSessionQuiz("");
+    }
+  }, [sessionFolder]);
+
+  const fetchFolders = async () => {
+    setFoldersLoading(true);
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Folders`);
+      if (!res.ok) throw new Error("Erro ao carregar pastas");
+      const data: Folder[] = await res.json();
+      setFolders(data);
+      if (data.length > 0 && !activeFolder) {
+        setActiveFolder(data[0].id);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar pastas:", err);
+    } finally {
+      setFoldersLoading(false);
+    }
+  };
+
+  const fetchQuizzes = async () => {
+    if (!activeFolder) return;
+    
+    setQuizzesLoading(true);
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Folders/${activeFolder}/quizzes`);
+      if (!res.ok) throw new Error("Erro ao carregar quizzes");
+      const data: Quiz[] = await res.json();
+      setQuizzes(data);
+    } catch (err) {
+      console.error("Erro ao carregar quizzes:", err);
+      setQuizzes([]);
+    } finally {
+      setQuizzesLoading(false);
+    }
+  };
+
+  const fetchSessionQuizzes = async () => {
+    if (!sessionFolder) return;
+    
+    setSessionQuizzesLoading(true);
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Folders/${sessionFolder}/quizzes`);
+      if (!res.ok) throw new Error("Erro ao carregar quizzes");
+      const data: Quiz[] = await res.json();
+      setSessionQuizzes(data);
+    } catch (err) {
+      console.error("Erro ao carregar quizzes:", err);
+      setSessionQuizzes([]);
+    } finally {
+      setSessionQuizzesLoading(false);
+    }
+  };
+
+  const createFolder = async () => {
+    if (!newFolderName.trim()) return;
+
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Folders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newFolderName }),
+      });
+
+      if (!res.ok) throw new Error("Erro ao criar pasta");
+      
+      setShowCreateModal(false);
+      setNewFolderName("");
+      fetchFolders();
+    } catch (err) {
+      console.error("Erro ao criar pasta:", err);
+      alert("Erro ao criar pasta. Tenta novamente.");
+    }
+  };
+
+  const updateFolder = async () => {
+    if (!editingFolderName.trim()) return;
+
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Folders/${editingFolderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editingFolderName }),
+      });
+
+      if (!res.ok) throw new Error("Erro ao editar pasta");
+      
+      setShowEditModal(false);
+      setEditingFolderId("");
+      setEditingFolderName("");
+      fetchFolders();
+    } catch (err) {
+      console.error("Erro ao editar pasta:", err);
+      alert("Erro ao editar pasta. Tenta novamente.");
+    }
+  };
+
+  const deleteFolder = async () => {
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Folders/${deletingFolderId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Erro ao eliminar pasta");
+      
+      if (activeFolder === deletingFolderId) {
+        setActiveFolder("");
+      }
+      setShowDeleteModal(false);
+      setDeleteingFolderId("");
+      setDeletingFolderName("");
+      fetchFolders();
+    } catch (err) {
+      console.error("Erro ao eliminar pasta:", err);
+      alert("Erro ao eliminar pasta. Tenta novamente.");
+    }
+  };
+
+  const deleteQuiz = async () => {
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Quizzes/${deletingQuizId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Erro ao eliminar quiz");
+      
+      setShowDeleteQuizModal(false);
+      setDeletingQuizId("");
+      setDeletingQuizName("");
+      fetchQuizzes();
+      fetchFolders();
+    } catch (err) {
+      console.error("Erro ao eliminar quiz:", err);
+      alert("Erro ao eliminar quiz. Tenta novamente.");
+    }
+  };
+
+  const updateQuiz = async () => {
+    if (!editingQuizTitle.trim()) return;
+
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Quizzes/${editingQuizId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          title: editingQuizTitle,
+          description: editingQuizDescription 
+        }),
+      });
+
+      if (!res.ok) throw new Error("Erro ao editar quiz");
+      
+      setShowEditQuizModal(false);
+      setEditingQuizId("");
+      setEditingQuizTitle("");
+      setEditingQuizDescription("");
+      
+      // Show success message if it was from an import
+      if (uploadStatus.type === 'loading' || uploadStatus.message === '') {
+        setUploadStatus({ message: 'Quiz importado e configurado com sucesso!', type: 'success' });
+        setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+      }
+      
+      fetchQuizzes();
+    } catch (err) {
+      console.error("Erro ao editar quiz:", err);
+      alert("Erro ao editar quiz. Tenta novamente.");
+    }
+  };
+
+  const openEditModal = (folder: Folder) => {
+    setEditingFolderId(folder.id);
+    setEditingFolderName(folder.name);
+    setShowEditModal(true);
+  };
+
+  const openDeleteModal = (folder: Folder) => {
+    setDeleteingFolderId(folder.id);
+    setDeletingFolderName(folder.name);
+    setShowDeleteModal(true);
+  };
+
+  const openDeleteQuizModal = (quiz: Quiz) => {
+    setDeletingQuizId(quiz.id);
+    setDeletingQuizName(quiz.title);
+    setShowDeleteQuizModal(true);
+  };
+
+  const openEditQuizModal = (quiz: Quiz) => {
+    setEditingQuizId(quiz.id);
+    setEditingQuizTitle(quiz.title);
+    setEditingQuizDescription(quiz.description || "");
+    setShowEditQuizModal(true);
+  };
+
   const uploadFile = (file: File) => {
+    if (!activeFolder) {
+      setUploadStatus({ message: 'Seleciona uma pasta primeiro!', type: 'error' });
+      setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
 
     setUploadStatus({ message: 'A carregar ficheiro...', type: 'loading' });
 
-    authFetch(`${apiBaseUrl}/api/Import/questions`, {
+    authFetch(`${apiBaseUrl}/api/Import/questions?folderId=${activeFolder}`, {
       method: "POST",
       body: formData,
     })
@@ -60,8 +317,35 @@ const DashboardPage: FC = () => {
       })
       .then((data) => {
         console.log("Upload feito com sucesso:", data);
-        setUploadStatus({ message: 'Ficheiro carregado com sucesso!', type: 'success' });
-        setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+        
+        // Don't show success message yet, wait for edit modal to close
+        setUploadStatus({ message: '', type: null });
+        
+        // Refresh folders and quizzes
+        fetchFolders();
+        fetchQuizzes().then(() => {
+          // Find the newly created quiz (it should be the most recent one)
+          if (data.quizId) {
+            // If API returns the quiz ID
+            const newQuiz = quizzes.find(q => q.id === data.quizId);
+            if (newQuiz) {
+              openEditQuizModal(newQuiz);
+            }
+          } else {
+            // Otherwise, fetch quizzes and open modal for the newest one
+            authFetch(`${apiBaseUrl}/api/Folders/${activeFolder}/quizzes`)
+              .then(res => res.json())
+              .then((updatedQuizzes: Quiz[]) => {
+                if (updatedQuizzes.length > 0) {
+                  // Get the most recent quiz
+                  const newestQuiz = updatedQuizzes.sort((a, b) => 
+                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                  )[0];
+                  openEditQuizModal(newestQuiz);
+                }
+              });
+          }
+        });
       })
       .catch((err) => {
         console.error("Falha no upload:", err);
@@ -70,8 +354,216 @@ const DashboardPage: FC = () => {
       });
   };
 
+  const handleFileSelect = () => {
+    if (!activeFolder) {
+      setUploadStatus({ message: 'Seleciona uma pasta primeiro!', type: 'error' });
+      setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+      return;
+    }
+    document.getElementById('file-input')?.click();
+  };
+
+  const selectedFolderName = folders.find(f => f.id === activeFolder)?.name || "Nenhuma pasta selecionada";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
+      {/* Create Folder Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 p-6 shadow-2xl">
+            <h3 className="text-xl font-bold">Nova Pasta</h3>
+            <p className="mt-1 text-sm text-white/70">Escolhe um nome para a pasta</p>
+            
+            <input
+              type="text"
+              placeholder="Nome da pasta"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && createFolder()}
+              className="mt-4 w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-green-400"
+              autoFocus
+            />
+            
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setNewFolderName("");
+                }}
+                className="flex-1 rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={createFolder}
+                disabled={!newFolderName.trim()}
+                className="flex-1 rounded-xl bg-green-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-600 disabled:opacity-50"
+              >
+                Criar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Folder Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 p-6 shadow-2xl">
+            <h3 className="text-xl font-bold">Editar Pasta</h3>
+            <p className="mt-1 text-sm text-white/70">Escolhe um novo nome</p>
+            
+            <input
+              type="text"
+              placeholder="Nome da pasta"
+              value={editingFolderName}
+              onChange={(e) => setEditingFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && updateFolder()}
+              className="mt-4 w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              autoFocus
+            />
+            
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingFolderId("");
+                  setEditingFolderName("");
+                }}
+                className="flex-1 rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={updateFolder}
+                disabled={!editingFolderName.trim()}
+                className="flex-1 rounded-xl bg-yellow-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-yellow-600 disabled:opacity-50"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Folder Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 p-6 shadow-2xl">
+            <h3 className="text-xl font-bold">Eliminar Pasta</h3>
+            <p className="mt-1 text-sm text-white/70">Tens a certeza que queres eliminar esta pasta?</p>
+            
+            <div className="mt-4 rounded-2xl border border-red-400/40 bg-red-400/10 p-4">
+              <p className="text-sm font-semibold text-red-300">{deletingFolderName}</p>
+              <p className="mt-1 text-xs text-white/70">Esta ação não pode ser desfeita.</p>
+            </div>
+            
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteingFolderId("");
+                  setDeletingFolderName("");
+                }}
+                className="flex-1 rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteFolder}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Quiz Modal */}
+      {showDeleteQuizModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 p-6 shadow-2xl">
+            <h3 className="text-xl font-bold">Eliminar Quiz</h3>
+            <p className="mt-1 text-sm text-white/70">Tens a certeza que queres eliminar este quiz?</p>
+            
+            <div className="mt-4 rounded-2xl border border-red-400/40 bg-red-400/10 p-4">
+              <p className="text-sm font-semibold text-red-300">{deletingQuizName}</p>
+              <p className="mt-1 text-xs text-white/70">Esta ação não pode ser desfeita.</p>
+            </div>
+            
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteQuizModal(false);
+                  setDeletingQuizId("");
+                  setDeletingQuizName("");
+                }}
+                className="flex-1 rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteQuiz}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Quiz Modal */}
+      {showEditQuizModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 p-6 shadow-2xl">
+            <h3 className="text-xl font-bold">Editar Quiz</h3>
+            <p className="mt-1 text-sm text-white/70">Atualiza o nome e descrição do quiz</p>
+            
+            <div className="mt-4 space-y-3">
+              <input
+                type="text"
+                placeholder="Nome do quiz"
+                value={editingQuizTitle}
+                onChange={(e) => setEditingQuizTitle(e.target.value)}
+                className="w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                autoFocus
+              />
+              
+              <textarea
+                placeholder="Descrição (opcional)"
+                value={editingQuizDescription}
+                onChange={(e) => setEditingQuizDescription(e.target.value)}
+                rows={3}
+                className="w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+            
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowEditQuizModal(false);
+                  setEditingQuizId("");
+                  setEditingQuizTitle("");
+                  setEditingQuizDescription("");
+                }}
+                className="flex-1 rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={updateQuiz}
+                disabled={!editingQuizTitle.trim()}
+                className="flex-1 rounded-xl bg-yellow-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-yellow-600 disabled:opacity-50"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex min-h-screen w-full gap-6 px-4 py-8">
         <aside className="w-72 shrink-0 rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
           <div className="mb-8">
@@ -127,17 +619,6 @@ const DashboardPage: FC = () => {
                 </>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => setActiveProjectTab("create")}
-                    className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
-                      activeProjectTab === "create"
-                        ? "bg-white/20 text-white shadow-sm"
-                        : "text-white/70 hover:bg-white/10"
-                    }`}
-                  >
-                    Criar quiz
-                  </button>
                   <button
                     type="button"
                     onClick={() => setActiveProjectTab("import")}
@@ -209,15 +690,44 @@ const DashboardPage: FC = () => {
                   <div className="mt-6 space-y-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+                        Pasta
+                      </p>
+                      <select 
+                        value={sessionFolder}
+                        onChange={(e) => setSessionFolder(e.target.value)}
+                        className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-300"
+                      >
+                        <option value="">Selecionar pasta</option>
+                        {folders.map((folder) => (
+                          <option key={folder.id} value={folder.id}>
+                            {folder.name} ({folder.quizCount} quizzes)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-white/60">
                         Quiz
                       </p>
-                        <select className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-300">
-                        <option value="">Selecionar quiz</option>
-                        <option value="equacoes">Equações básicas</option>
-                        <option value="revolucao">Revolução Francesa</option>
-                        <option value="javascript">JavaScript rápido</option>
-                        <option value="fisica">Física do movimento</option>
-                        </select>
+                      <select 
+                        value={sessionQuiz}
+                        onChange={(e) => setSessionQuiz(e.target.value)}
+                        disabled={!sessionFolder || sessionQuizzesLoading}
+                        className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="">
+                          {sessionQuizzesLoading 
+                            ? "A carregar..." 
+                            : sessionFolder 
+                              ? "Selecionar quiz" 
+                              : "Seleciona uma pasta primeiro"}
+                        </option>
+                        {sessionQuizzes.map((quiz) => (
+                          <option key={quiz.id} value={quiz.id}>
+                            {quiz.title} ({quiz.questionsCount} perguntas)
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-white/60">
@@ -247,32 +757,66 @@ const DashboardPage: FC = () => {
                     Cria uma pasta por disciplina ou tema
                     </p>
                   </div>
-                  <button className="rounded-xl bg-white/20 px-4 py-2 text-sm font-semibold transition hover:bg-white/30">
-                    Nova pasta
+                  <button 
+                    onClick={() => setShowCreateModal(true)}
+                    className="flex items-center gap-2 rounded-xl bg-green-500 px-3 py-2 text-sm font-semibold transition hover:bg-green-600"
+                    title="Nova Pasta"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    </svg>
                   </button>
                   </div>
 
                   <div className="mt-6 space-y-4">
-                  {[
-                    { name: "Matematica", detail: "4 quizzes" },
-                    { name: "Historia", detail: "2 quizzes" },
-                    { name: "Programacao", detail: "6 quizzes" },
-                  ].map((folder) => (
-                    <button
-                    key={folder.name}
-                    onClick={() => setActiveFolder(folder.name)}
-                    className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
-                      activeFolder === folder.name
-                      ? "border-white/40 bg-white/20 shadow-lg"
-                      : "border-white/15 bg-white/5 hover:bg-white/10"
-                    }`}
-                    >
-                    <div className="text-base font-semibold">
-                      {folder.name}
-                    </div>
-                    <p className="text-xs text-white/60">{folder.detail}</p>
-                    </button>
-                  ))}
+                  {foldersLoading ? (
+                    <div className="text-center text-sm text-white/60">A carregar pastas...</div>
+                  ) : folders.length === 0 ? (
+                    <div className="text-center text-sm text-white/60">Nenhuma pasta criada ainda</div>
+                  ) : (
+                    folders.map((folder) => (
+                      <div
+                        key={folder.id}
+                        className={`flex items-center justify-between rounded-2xl border px-4 py-4 transition ${
+                          activeFolder === folder.id
+                          ? "border-white/40 bg-white/20 shadow-lg"
+                          : "border-white/15 bg-white/5 hover:bg-white/10"
+                        }`}
+                      >
+                        <button
+                          onClick={() => setActiveFolder(folder.id)}
+                          className="flex-1 text-left"
+                        >
+                          <div className="text-base font-semibold">
+                            {folder.name}
+                          </div>
+                          <p className="text-xs text-white/60">{folder.quizCount} quizzes</p>
+                        </button>
+                        
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openEditModal(folder)}
+                            className="rounded-lg bg-yellow-500/20 p-2 transition hover:bg-yellow-500/40"
+                            title="Editar pasta"
+                          >
+                            <svg className="h-4 w-4 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          
+                          <button
+                            onClick={() => openDeleteModal(folder)}
+                            className="rounded-lg bg-red-500/20 p-2 transition hover:bg-red-500/40"
+                            title="Eliminar pasta"
+                          >
+                            <svg className="h-4 w-4 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                   </div>
                 </div>
 
@@ -283,7 +827,7 @@ const DashboardPage: FC = () => {
                     <div>
                       <h2 className="text-xl font-bold">Importar quiz</h2>
                       <p className="text-sm text-white/70">
-                      Pasta atual: {activeFolder}
+                      Pasta atual: {selectedFolderName}
                       </p>
                     </div>
                     </div>
@@ -310,11 +854,11 @@ const DashboardPage: FC = () => {
                       Larga ficheiros aqui para importar
                     </p>
                     <p className="mt-2 text-sm text-white/70">
-                      Escolhe um ficheiro JSON ou CSV dentro da pasta
+                      Escolhe um ficheiro GIFT ou JSON dentro da pasta
                     </p>
                     <input
                       type="file"
-                      accept=".json,.csv"
+                      accept=".gift,.json"
                       className="hidden"
                       id="file-input"
                       onChange={(e) => {
@@ -323,9 +867,9 @@ const DashboardPage: FC = () => {
                       }}
                     />
                     <button 
-                      className="mt-6 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105"
-                      onClick={() => document.getElementById('file-input')?.click()}
-                      disabled={uploadStatus.type === 'loading'}
+                      className="mt-6 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={handleFileSelect}
+                      disabled={uploadStatus.type === 'loading' || !activeFolder}
                     >
                       {uploadStatus.type === 'loading' ? 'A carregar...' : 'Selecionar ficheiro'}
                     </button>
@@ -353,83 +897,86 @@ const DashboardPage: FC = () => {
                     </>
                     )}
 
-                  {activeProjectTab === "create" && (
-                  <>
-                    <div className="flex items-start justify-between">
-                    <div>
-                      <h2 className="text-xl font-bold">Criar quiz</h2>
-                      <p className="text-sm text-white/70">
-                      Pasta atual: {activeFolder}
-                      </p>
-                    </div>
-                    </div>
-
-                    <div className="mt-6 space-y-4">
-                    <input
-                      type="text"
-                      placeholder="Nome do quiz"
-                      className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                    />
-                    <textarea
-                      placeholder="Descricao curta"
-                      rows={3}
-                      className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                    />
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
-                      Nivel: Intermedio
-                      </div>
-                      <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-white/70">
-                      Perguntas: 12
-                      </div>
-                    </div>
-                    <button className="w-full rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
-                      Criar quiz
-                    </button>
-                    </div>
-                  </>
-                  )}
-
-                  {activeProjectTab === "library" && (
-                  <>
-                    <div className="flex items-start justify-between">
-                    <div>
+                    {activeProjectTab === "library" && (
+                    <>
+                      <div className="flex items-start justify-between">
+                      <div>
                       <h2 className="text-xl font-bold">Biblioteca</h2>
                       <p className="text-sm text-white/70">
-                      Quizzes da pasta: {activeFolder}
+                      Quizzes da pasta: {selectedFolderName}
                       </p>
-                    </div>
-                    </div>
+                      </div>
+                      </div>
 
-                    <div className="mt-6">
-                    <input
+                      <div className="mt-6">
+                      <input
                       type="text"
                       placeholder="Pesquisar quiz"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full rounded-2xl bg-white/15 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                    />
-                    </div>
+                      />
+                      </div>
 
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    {filteredQuizzes.map((quiz) => (
-                      <div
-                      key={quiz.name}
-                      className="rounded-2xl border border-white/20 bg-white/10 p-4"
-                      >
-                      <div className="text-sm font-semibold">
-                        {quiz.name}
+                      <div className="mt-4">
+                      {quizzesLoading ? (
+                      <div className="text-center text-sm text-white/60">A carregar quizzes...</div>
+                      ) : !activeFolder ? (
+                      <div className="text-center text-sm text-white/60">Seleciona uma pasta primeiro</div>
+                      ) : filteredQuizzes.length === 0 ? (
+                      <div className="text-center text-sm text-white/60">
+                      {searchQuery ? "Nenhum quiz encontrado" : "Nenhum quiz nesta pasta"}
                       </div>
-                      <p className="mt-1 text-xs text-white/60">
-                        {quiz.detail}
-                      </p>
-                      <button className="mt-3 rounded-xl bg-white/20 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/30">
-                        Abrir
-                      </button>
+                      ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {filteredQuizzes.map((quiz) => (
+                        <div
+                        key={quiz.id}
+                        className="rounded-xl border border-white/20 bg-white/10 p-4 transition hover:bg-white/15"
+                        >
+                        <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0 pr-2">
+                        <h3 className="text-sm font-semibold text-white truncate">
+                          {quiz.title}
+                        </h3>
+                        <p className="text-xs text-white/60 mt-1">
+                          {quiz.questionsCount} {quiz.questionsCount === 1 ? 'pergunta' : 'perguntas'}
+                        </p>
+                        {quiz.description && (
+                          <p className="text-xs text-white/50 mt-1 line-clamp-2">
+                          {quiz.description}
+                          </p>
+                        )}
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEditQuizModal(quiz)}
+                          className="rounded-md bg-yellow-500/20 p-2 transition hover:bg-yellow-500/40"
+                          title="Editar quiz"
+                        >
+                          <svg className="h-4 w-4 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        
+                        <button
+                          onClick={() => openDeleteQuizModal(quiz)}
+                          className="rounded-md bg-red-500/20 p-2 transition hover:bg-red-500/40"
+                          title="Eliminar quiz"
+                        >
+                          <svg className="h-4 w-4 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                        </div>
+                        </div>
+                        </div>
+                      ))}
                       </div>
-                    ))}
-                    </div>
-                  </>
+                      )}
+                      </div>
+                    </>
                   )}
                 </div>
                 </section>

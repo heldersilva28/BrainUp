@@ -7,5 +7,6 @@ namespace BrainUp.API.DTOs.Quizzes
         public string? Description { get; set; }
         public Guid? AuthorId { get; set; }
         public DateTime CreatedAt { get; set; }
+        public int QuestionsCount { get; set; }
     }
 }

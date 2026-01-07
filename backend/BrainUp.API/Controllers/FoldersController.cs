@@ -1,4 +1,5 @@
 using BrainUp.API.DTOs;
+using BrainUp.API.DTOs.Quizzes;
 using BrainUp.API.Models;
 using BrainUp.API.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -13,10 +14,12 @@ namespace BrainUp.API.Controllers;
 public class FoldersController : ControllerBase
 {
     private readonly FolderService _folderService;
+    private readonly QuizService _quizService;
 
-    public FoldersController(FolderService folderService)
+    public FoldersController(FolderService folderService, QuizService quizService)
     {
         _folderService = folderService;
+        _quizService = quizService;
     }
 
     private Guid GetUserId()
@@ -30,7 +33,7 @@ public class FoldersController : ControllerBase
     {
         var userId = GetUserId();
         var folders = await _folderService.GetAllByUserIdAsync(userId);
-        
+
         var response = folders.Select(f => new FolderResponseDto
         {
             Id = f.Id,
@@ -39,7 +42,7 @@ public class FoldersController : ControllerBase
             CreatedAt = f.CreatedAt,
             QuizCount = f.Quizzes.Count
         });
-        
+
         return Ok(response);
     }
 
@@ -48,10 +51,10 @@ public class FoldersController : ControllerBase
     {
         var userId = GetUserId();
         var folder = await _folderService.GetByIdAsync(id, userId);
-        
+
         if (folder == null)
             return NotFound();
-        
+
         var response = new FolderResponseDto
         {
             Id = folder.Id,
@@ -60,23 +63,45 @@ public class FoldersController : ControllerBase
             CreatedAt = folder.CreatedAt,
             QuizCount = folder.Quizzes.Count
         };
-        
+
         return Ok(response);
+    }
+
+    [HttpGet("{id}/quizzes")]
+    public async Task<ActionResult<IEnumerable<QuizDto>>> GetFolderQuizzes(Guid id)
+    {
+        var userId = GetUserId();
+        var folder = await _folderService.GetByIdAsync(id, userId);
+
+        if (folder == null)
+            return NotFound();
+
+        var quizzes = folder.Quizzes.Select(q => new QuizDto
+        {
+            Id = q.Id,
+            Title = q.Title,
+            Description = q.Description,
+            AuthorId = q.AuthorId,
+            CreatedAt = q.CreatedAt,
+            QuestionsCount = _quizService.GetQuestionCountInQuiz(q.Id).Result
+        }).ToList();
+
+        return Ok(quizzes);
     }
 
     [HttpPost]
     public async Task<ActionResult<FolderResponseDto>> CreateFolder(CreateFolderDto dto)
     {
         var userId = GetUserId();
-        
+
         var folder = new Folder
         {
             Name = dto.Name,
             UserId = userId
         };
-        
+
         var createdFolder = await _folderService.CreateAsync(folder);
-        
+
         var response = new FolderResponseDto
         {
             Id = createdFolder.Id,
@@ -85,7 +110,7 @@ public class FoldersController : ControllerBase
             CreatedAt = createdFolder.CreatedAt,
             QuizCount = 0
         };
-        
+
         return CreatedAtAction(nameof(GetFolder), new { id = response.Id }, response);
     }
 
@@ -94,10 +119,10 @@ public class FoldersController : ControllerBase
     {
         var userId = GetUserId();
         var folder = await _folderService.UpdateAsync(id, userId, dto.Name);
-        
+
         if (folder == null)
             return NotFound();
-        
+
         var response = new FolderResponseDto
         {
             Id = folder.Id,
@@ -106,7 +131,7 @@ public class FoldersController : ControllerBase
             CreatedAt = folder.CreatedAt,
             QuizCount = folder.Quizzes.Count
         };
-        
+
         return Ok(response);
     }
 
@@ -115,10 +140,10 @@ public class FoldersController : ControllerBase
     {
         var userId = GetUserId();
         var deleted = await _folderService.DeleteAsync(id, userId);
-        
+
         if (!deleted)
             return NotFound();
-        
+
         return NoContent();
     }
 }
