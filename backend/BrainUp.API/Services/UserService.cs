@@ -35,7 +35,7 @@ namespace BrainUp.API.Services
                 Username = dto.Username,
                 Email = dto.Email,
                 PasswordHash = HashPassword(dto.Password),
-                CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
+                CreatedAt = DateTime.UtcNow
             };
 
             // Escolher a role
