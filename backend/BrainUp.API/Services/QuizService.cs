@@ -20,7 +20,7 @@ namespace BrainUp.API.Services
                 AuthorId = authorId,
                 Title = dto.Title,
                 Description = dto.Description,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
             };
 
             _context.Quizzes.Add(quiz);
@@ -55,6 +55,100 @@ namespace BrainUp.API.Services
                 CreatedAt = quiz.CreatedAt,
                 QuestionsCount = await _context.QuizQuestions.CountAsync(qq => qq.QuizId == quiz.Id)
             };
+        }
+
+        // -------------------------------------------------------
+        // PUT FOLDERID
+        // -------------------------------------------------------
+        public async Task<bool> UpdateQuizFolder(Guid quizId, Guid authorId, Guid? folderId)
+        {
+            var quiz = await _context.Quizzes
+                .FirstOrDefaultAsync(q => q.Id == quizId && q.AuthorId == authorId);
+
+            if (quiz == null)
+                return false;
+
+            quiz.FolderId = folderId;
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+
+        // -------------------------------------------------------
+        // DUPLICATE QUIZ
+        // -------------------------------------------------------
+        public async Task<QuizDto?> DuplicateQuiz(Guid quizId, Guid authorId)
+        {
+            var originalQuiz = await _context.Quizzes
+            .FirstOrDefaultAsync(q => q.Id == quizId);
+
+            if (originalQuiz == null)
+            return null;
+
+            var newQuiz = new Quiz
+            {
+            Id = Guid.NewGuid(),
+            AuthorId = authorId,
+            Title = originalQuiz.Title + " (Copy)",
+            Description = originalQuiz.Description,
+            CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
+            FolderId = originalQuiz.FolderId
+            };
+
+            _context.Quizzes.Add(newQuiz);
+            await _context.SaveChangesAsync();
+
+            var originalQuizQuestions = await _context.QuizQuestions
+            .Include(qq => qq.Question)
+                .ThenInclude(q => q.QuestionOptions)
+            .Where(qq => qq.QuizId == originalQuiz.Id)
+            .OrderBy(qq => qq.QuestionOrder)
+            .ToListAsync();
+
+            foreach (var originalQQ in originalQuizQuestions)
+            {
+            var originalQuestion = originalQQ.Question;
+            
+            var newQuestion = new Question
+            {
+                Id = Guid.NewGuid(),
+                TypeId = originalQuestion.TypeId,
+                AuthorId = authorId,
+                QuestionText = originalQuestion.QuestionText,
+                CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
+            };
+
+            _context.Questions.Add(newQuestion);
+            await _context.SaveChangesAsync();
+
+            foreach (var originalOption in originalQuestion.QuestionOptions)
+            {
+                var newOption = new QuestionOption
+                {
+                    Id = Guid.NewGuid(),
+                    QuestionId = newQuestion.Id,
+                    OptionText = originalOption.OptionText,
+                    IsCorrect = originalOption.IsCorrect,
+                    CorrectOrder = originalOption.CorrectOrder
+                };
+
+                _context.QuestionOptions.Add(newOption);
+            }
+
+            var newQuizQuestion = new QuizQuestion
+            {
+                QuizId = newQuiz.Id,
+                QuestionId = newQuestion.Id,
+                QuestionOrder = originalQQ.QuestionOrder
+            };
+
+            _context.QuizQuestions.Add(newQuizQuestion);
+            }
+
+            await _context.SaveChangesAsync();
+
+            return await GetQuizById(newQuiz.Id);
         }
 
         // -------------------------------------------------------

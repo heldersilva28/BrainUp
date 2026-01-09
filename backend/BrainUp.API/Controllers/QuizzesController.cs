@@ -73,10 +73,10 @@ namespace BrainUp.API.Controllers
         public async Task<IActionResult> DeleteQuiz(Guid id)
         {
             var userId = GetUserId();
-            
+
             // Remove all questions associated with the quiz first
             await _service.RemoveAllQuestionsFromQuiz(id, userId);
-            
+
             var success = await _service.DeleteQuiz(id, userId);
 
             return success ? Ok("Quiz e todas as questões removidos.") : NotFound("Quiz não encontrado ou não pertence a este utilizador.");
@@ -119,6 +119,32 @@ namespace BrainUp.API.Controllers
             var ok = await _service.ReorderQuestions(quizId, userId, dto);
 
             return ok ? Ok("Ordem de perguntas atualizada.") : BadRequest("Falha ao atualizar ordem.");
+        }
+
+        // -------------------------------------------------------
+        // PUT FOLDERID
+        // -------------------------------------------------------
+        [HttpPut("{quizId}/folder")]
+        [Authorize]
+        public async Task<IActionResult> UpdateQuizFolder(Guid quizId, Guid folderId)
+        {
+            var userId = GetUserId();
+            var ok = await _service.UpdateQuizFolder(quizId, userId, folderId);
+
+            return ok ? Ok("Pasta do quiz atualizada.") : BadRequest("Falha ao atualizar pasta.");
+        }
+
+        // -------------------------------------------------------
+        // DUPLICATE QUIZ
+        // -------------------------------------------------------
+        [HttpPost("{quizId}/duplicate")]
+        [Authorize]
+        public async Task<IActionResult> DuplicateQuiz(Guid quizId)
+        {
+            var userId = GetUserId();
+            var duplicatedQuiz = await _service.DuplicateQuiz(quizId, userId);
+
+            return duplicatedQuiz == null ? NotFound("Quiz não encontrado.") : Ok(duplicatedQuiz);
         }
     }
 }

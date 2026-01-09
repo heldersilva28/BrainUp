@@ -65,7 +65,7 @@ const RegisterPage: FC = () => {
       {/* Container do Formulário */}
       <div
         className="relative z-10 bg-white/20 backdrop-blur-md rounded-3xl p-10 shadow-2xl w-full max-w-md 
-                  opacity-0 animate-scale-in max-h-[90vh] overflow-y-auto pb-6"
+                  opacity-0 animate-scale-in max-h-[90vh] overflow-y-auto overflow-x-hidden pb-6"
         style={{ animationFillMode: "forwards" }}
       >
 
@@ -104,7 +104,7 @@ const RegisterPage: FC = () => {
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
 
           {/*ZONA COM SCROLL (apenas os campos) */}
-          <div className="flex flex-col gap-6 max-h-[35vh] overflow-y-auto pr-2">
+          <div className="flex flex-col gap-6 max-h-[35vh] overflow-y-auto overflow-x-hidden pr-2">
 
             {/* Email */}
             <div

@@ -54,6 +54,9 @@ const DashboardPage: FC = () => {
   const [sessionQuizzes, setSessionQuizzes] = useState<Quiz[]>([]);
   const [sessionQuizzesLoading, setSessionQuizzesLoading] = useState(false);
 
+  const [draggedQuizId, setDraggedQuizId] = useState<string | null>(null);
+  const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null);
+  const [openMenuQuizId, setOpenMenuQuizId] = useState<string | null>(null);
 
   const filteredQuizzes = quizzes.filter(quiz =>
     quiz.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -96,6 +99,17 @@ const DashboardPage: FC = () => {
       setSessionQuiz("");
     }
   }, [sessionFolder]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openMenuQuizId && !(event.target as Element).closest('.quiz-menu')) {
+        setOpenMenuQuizId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openMenuQuizId]);
 
   const fetchFolders = async () => {
     setFoldersLoading(true);
@@ -262,6 +276,82 @@ const DashboardPage: FC = () => {
       console.error("Erro ao editar quiz:", err);
       alert("Erro ao editar quiz. Tenta novamente.");
     }
+  };
+
+  const duplicateQuiz = async (quizId: string) => {
+    try {
+      setUploadStatus({ message: 'A duplicar quiz...', type: 'loading' });
+      
+      const res = await authFetch(`${apiBaseUrl}/api/Quizzes/${quizId}/duplicate`, {
+        method: "POST",
+      });
+
+      if (!res.ok) throw new Error("Erro ao duplicar quiz");
+      
+      setUploadStatus({ message: 'Quiz duplicado com sucesso!', type: 'success' });
+      setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+      
+      // Refresh folders and quizzes
+      fetchFolders();
+      fetchQuizzes();
+    } catch (err) {
+      console.error("Erro ao duplicar quiz:", err);
+      setUploadStatus({ message: 'Erro ao duplicar quiz. Tenta novamente.', type: 'error' });
+      setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+    }
+  };
+
+  const moveQuizToFolder = async (quizId: string, folderId: string) => {
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Quizzes/${quizId}/folder?folderId=${folderId}`, {
+        method: "PUT",
+      });
+
+      if (!res.ok) throw new Error("Erro ao mover quiz");
+      
+      // Refresh folders and quizzes
+      fetchFolders();
+      fetchQuizzes();
+      
+      // Show success message
+      setUploadStatus({ message: 'Quiz movido com sucesso!', type: 'success' });
+      setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+    } catch (err) {
+      console.error("Erro ao mover quiz:", err);
+      setUploadStatus({ message: 'Erro ao mover quiz. Tenta novamente.', type: 'error' });
+      setTimeout(() => setUploadStatus({ message: '', type: null }), 3000);
+    }
+  };
+
+  const handleQuizDragStart = (quizId: string) => {
+    setDraggedQuizId(quizId);
+  };
+
+  const handleQuizDragEnd = () => {
+    setDraggedQuizId(null);
+    setDropTargetFolderId(null);
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    if (draggedQuizId && folderId !== activeFolder) {
+      setDropTargetFolderId(folderId);
+    }
+  };
+
+  const handleFolderDragLeave = () => {
+    setDropTargetFolderId(null);
+  };
+
+  const handleFolderDrop = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    setDropTargetFolderId(null);
+    
+    if (draggedQuizId && folderId !== activeFolder) {
+      moveQuizToFolder(draggedQuizId, folderId);
+    }
+    
+    setDraggedQuizId(null);
   };
 
   const openEditModal = (folder: Folder) => {
@@ -775,9 +865,14 @@ const DashboardPage: FC = () => {
                     folders.map((folder) => (
                       <div
                         key={folder.id}
+                        onDragOver={(e) => handleFolderDragOver(e, folder.id)}
+                        onDragLeave={handleFolderDragLeave}
+                        onDrop={(e) => handleFolderDrop(e, folder.id)}
                         className={`flex items-center justify-between rounded-2xl border px-4 py-4 transition ${
                           activeFolder === folder.id
                           ? "border-white/40 bg-white/20 shadow-lg"
+                          : dropTargetFolderId === folder.id
+                          ? "border-green-400/60 bg-green-400/20 shadow-lg scale-105"
                           : "border-white/15 bg-white/5 hover:bg-white/10"
                         }`}
                       >
@@ -930,7 +1025,12 @@ const DashboardPage: FC = () => {
                       {filteredQuizzes.map((quiz) => (
                         <div
                         key={quiz.id}
-                        className="rounded-xl border border-white/20 bg-white/10 p-4 transition hover:bg-white/15"
+                        draggable
+                        onDragStart={() => handleQuizDragStart(quiz.id)}
+                        onDragEnd={handleQuizDragEnd}
+                        className={`rounded-xl border border-white/20 bg-white/10 p-4 transition hover:bg-white/15 cursor-move ${
+                          draggedQuizId === quiz.id ? 'opacity-50 scale-95' : ''
+                        }`}
                         >
                         <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0 pr-2">
@@ -947,37 +1047,82 @@ const DashboardPage: FC = () => {
                         )}
                         </div>
                         
-                        <div className="flex items-center gap-1">
+                        <div className="relative quiz-menu">
                         <button
-                          onClick={() => openVerQuizModal(quiz)}
-                          className="rounded-md bg-blue-500/20 p-2 transition hover:bg-blue-500/40"
-                          title="Ver quiz"
+                          onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuQuizId(openMenuQuizId === quiz.id ? null : quiz.id);
+                          }}
+                          className="rounded-md bg-white/10 p-2 transition hover:bg-white/20"
+                          title="Opções"
                         >
-                          <svg className="h-4 w-4 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                          <circle cx="12" cy="12" r="3" />
+                          <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <circle cx="12" cy="5" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="12" cy="19" r="2" />
                           </svg>
                         </button>
 
-                        <button
-                          onClick={() => openEditQuizModal(quiz)}
-                          className="rounded-md bg-yellow-500/20 p-2 transition hover:bg-yellow-500/40"
-                          title="Editar quiz"
-                        >
-                          <svg className="h-4 w-4 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        
-                        <button
-                          onClick={() => openDeleteQuizModal(quiz)}
-                          className="rounded-md bg-red-500/20 p-2 transition hover:bg-red-500/40"
-                          title="Eliminar quiz"
-                        >
-                          <svg className="h-4 w-4 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        {openMenuQuizId === quiz.id && (
+                          <div className="absolute right-0 top-full mt-1 w-40 rounded-xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 shadow-2xl z-10">
+                          <button
+                            onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuQuizId(null);
+                            openVerQuizModal(quiz);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-white transition hover:bg-white/10 rounded-t-xl"
+                          >
+                            <svg className="h-4 w-4 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                            </svg>
+                            Ver quiz
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuQuizId(null);
+                            duplicateQuiz(quiz.id);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-white transition hover:bg-white/10"
+                          >
+                            <svg className="h-4 w-4 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            Duplicar
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuQuizId(null);
+                            openEditQuizModal(quiz);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-white transition hover:bg-white/10"
+                          >
+                            <svg className="h-4 w-4 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Editar
+                          </button>
+                          
+                          <button
+                            onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuQuizId(null);
+                            openDeleteQuizModal(quiz);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-red-300 transition hover:bg-white/10 rounded-b-xl"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Eliminar
+                          </button>
+                          </div>
+                        )}
                         </div>
                         </div>
                         </div>
