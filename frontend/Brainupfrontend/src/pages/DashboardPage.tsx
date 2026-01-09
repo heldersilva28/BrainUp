@@ -54,12 +54,6 @@ const DashboardPage: FC = () => {
   const [sessionQuizzes, setSessionQuizzes] = useState<Quiz[]>([]);
   const [sessionQuizzesLoading, setSessionQuizzesLoading] = useState(false);
 
-  const allQuizzes = [
-    { name: "Equações básicas", detail: "10 perguntas • Matemática" },
-    { name: "Revolução Francesa", detail: "15 perguntas • História" },
-    { name: "JavaScript rápido", detail: "8 perguntas • Programação" },
-    { name: "Física do movimento", detail: "12 perguntas • Matemática" },
-  ];
 
   const filteredQuizzes = quizzes.filter(quiz =>
     quiz.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -294,6 +288,10 @@ const DashboardPage: FC = () => {
     setEditingQuizDescription(quiz.description || "");
     setShowEditQuizModal(true);
   };
+
+  const openVerQuizModal = (quiz: Quiz) => {
+    navigate(`/ver-quiz?quizId=${quiz.id}`);
+  }
 
   const uploadFile = (file: File) => {
     if (!activeFolder) {
@@ -950,6 +948,17 @@ const DashboardPage: FC = () => {
                         </div>
                         
                         <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openVerQuizModal(quiz)}
+                          className="rounded-md bg-blue-500/20 p-2 transition hover:bg-blue-500/40"
+                          title="Ver quiz"
+                        >
+                          <svg className="h-4 w-4 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </button>
+
                         <button
                           onClick={() => openEditQuizModal(quiz)}
                           className="rounded-md bg-yellow-500/20 p-2 transition hover:bg-yellow-500/40"

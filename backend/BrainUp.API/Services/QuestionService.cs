@@ -84,6 +84,43 @@ namespace BrainUp.API.Services
         }
 
         // -------------------------------------------------------
+        // GET QUESTIONS FROM QUIZ
+        // -------------------------------------------------------
+        public async Task<List<QuestionDto>> GetFromQuiz(Guid quizId, Guid authorId)
+        {
+            var quizExists = await _context.Quizzes
+                .AnyAsync(q => q.Id == quizId && q.AuthorId == authorId);
+
+            if (!quizExists) return new List<QuestionDto>();
+
+            var questionIds = await _context.QuizQuestions
+                .Where(qq => qq.QuizId == quizId)
+                .Select(qq => qq.QuestionId)
+                .ToListAsync();
+
+            var questions = await _context.Questions
+                .Include(q => q.Type)
+                .Include(q => q.QuestionOptions)
+                .Where(q => questionIds.Contains(q.Id))
+                .ToListAsync();
+
+            return questions.Select(q => new QuestionDto
+            {
+                Id = q.Id,
+                QuestionText = q.QuestionText,
+                Type = q.Type.Name,
+                CreatedAt = q.CreatedAt,
+                Options = q.QuestionOptions.Select(o => new QuestionOptionResponseDto
+                {
+                    Id = o.Id,
+                    OptionText = o.OptionText,
+                    IsCorrect = o.IsCorrect ?? false,
+                    CorrectOrder = o.CorrectOrder
+                }).ToList()
+            }).ToList();
+        }
+
+        // -------------------------------------------------------
         // UPDATE
         // -------------------------------------------------------
         public async Task<QuestionDto?> UpdateQuestion(Guid id, Guid authorId, QuestionUpdateDto dto)

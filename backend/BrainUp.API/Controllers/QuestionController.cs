@@ -57,6 +57,20 @@ namespace BrainUp.API.Controllers
         }
 
         // -------------------------------------------------------
+        // GET QUESTIONS FROM QUIZ
+        // -------------------------------------------------------
+        [HttpGet("quiz/{quizId}")]
+        [Authorize]
+        public async Task<IActionResult> GetFromQuiz(Guid quizId)
+        {
+            var authorId = GetUserId();
+            var questions = await _service.GetFromQuiz(quizId, authorId);
+
+            return Ok(questions);
+        }
+
+
+        // -------------------------------------------------------
         // UPDATE
         // -------------------------------------------------------
         [HttpPut("{id}")]

@@ -7,6 +7,7 @@ import DashboardPage from "./pages/DashboardPage";
 import QuizBuilderPage from "./pages/QuizBuilderPage";
 import HomeSessionPage from "./pages/HomeSessionPage";
 import WaitingSessionPage from "./pages/WaitingSessionPage";
+import VerQuiz from "./pages/VerQuiz";
 
 const App: React.FC = () => {
   return (
@@ -19,6 +20,7 @@ const App: React.FC = () => {
         <Route path="/session" element={<HomeSessionPage />} />
         <Route path="/quiz-builder" element={<QuizBuilderPage />} />
         <Route path="/session-waiting" element={<WaitingSessionPage />} />
+        <Route path="/ver-quiz" element={<VerQuiz />} />
       </Routes>
     </Router>
   );
