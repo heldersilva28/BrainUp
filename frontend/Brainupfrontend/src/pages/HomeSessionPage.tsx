@@ -14,7 +14,7 @@ const HomeSessionPage: FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
+    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
       <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-8">
         <header className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
           <div className="flex flex-wrap items-center justify-between gap-4">
