@@ -385,6 +385,11 @@ const DashboardPage: FC = () => {
     navigate(`/ver-quiz?quizId=${quiz.id}`);
   }
 
+  const handleLogout = () => {
+    sessionStorage.removeItem("brainup_token");
+    navigate("/");
+  };
+
   const uploadFile = (file: File) => {
     if (!activeFolder) {
       setUploadStatus({ message: 'Seleciona uma pasta primeiro!', type: 'error' });
@@ -655,7 +660,7 @@ const DashboardPage: FC = () => {
       )}
 
       <div className="flex min-h-screen w-full gap-6 px-4 py-8">
-        <aside className="w-72 shrink-0 rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
+        <aside className="w-72 shrink-0 rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl flex flex-col">
           <div className="mb-8">
             <div className="text-xs uppercase tracking-[0.3em] text-white/60">
               BrainUp
@@ -734,6 +739,19 @@ const DashboardPage: FC = () => {
                 </>
               )}
             </div>
+          </div>
+
+          <div className="mt-auto pt-6 border-t border-white/20">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full rounded-xl bg-red-500/20 px-3 py-2 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/30 flex items-center gap-2"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Terminar sessão
+            </button>
           </div>
         </aside>
 
