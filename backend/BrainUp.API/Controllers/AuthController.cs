@@ -46,5 +46,20 @@ namespace BrainUp.API.Controllers
             return Ok(new { userId, email, role });
         }
 
+        [HttpGet("validate")]
+        [Authorize]
+        public IActionResult ValidateToken()
+        {
+          // If we reach here, the JWT token is valid (thanks to [Authorize] attribute)
+          var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+          var email = User.FindFirst(ClaimTypes.Email)?.Value;
+          
+          return Ok(new { 
+            valid = true, 
+            userId = userId,
+            email = email,
+            message = "Token is valid" 
+          });
+        }
     }
 }

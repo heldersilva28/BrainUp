@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuthGuard } from "../hooks/useAuthGuard";
 
 interface QuestionOption {
   id: string;
@@ -27,6 +28,7 @@ interface QuizDetails {
 
 const VerQuiz: FC = () => {
   const navigate = useNavigate();
+  useAuthGuard();
   const [searchParams] = useSearchParams();
   const quizId = searchParams.get("quizId");
 

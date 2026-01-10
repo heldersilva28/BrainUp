@@ -1,7 +1,9 @@
 import type { FC } from "react";
 import { Link } from "react-router-dom";
+import { useAuthGuard } from "../hooks/useAuthGuard";
 
 const HomeSessionPage: FC = () => {
+  useAuthGuard();
   const players = [
     "Ana Silva",
     "Bruno Costa",

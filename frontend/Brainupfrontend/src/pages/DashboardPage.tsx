@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuthGuard } from "../hooks/useAuthGuard";
 
 interface Folder {
   id: string;
@@ -21,6 +22,7 @@ interface Quiz {
 
 const DashboardPage: FC = () => {
   const navigate = useNavigate();
+  useAuthGuard();
   const [activeSection, setActiveSection] = useState<"projects" | "sessions">(
     "projects"
   );
