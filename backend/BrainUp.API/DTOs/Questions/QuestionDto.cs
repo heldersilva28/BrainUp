@@ -11,6 +11,8 @@ namespace BrainUp.API.DTOs.Questions
         public DateTime CreatedAt { get; set; }
 
         public List<QuestionOptionResponseDto> Options { get; set; } = new();
+
+        public int Order { get; set;  }
     }
 
     public class QuestionOptionResponseDto

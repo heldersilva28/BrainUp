@@ -116,7 +116,8 @@ namespace BrainUp.API.Services
                     OptionText = o.OptionText,
                     IsCorrect = o.IsCorrect ?? false,
                     CorrectOrder = o.CorrectOrder
-                }).ToList()
+                }).ToList(),
+                Order = questionIds.IndexOf(q.Id)
             }).ToList();
         }
 
