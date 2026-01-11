@@ -124,41 +124,85 @@ namespace BrainUp.API.Services
         // -------------------------------------------------------
         // UPDATE
         // -------------------------------------------------------
-        public async Task<QuestionDto?> UpdateQuestion(Guid id, Guid authorId, QuestionUpdateDto dto)
+        public async Task<QuestionDto?> UpdateQuestion(
+            Guid id,
+            Guid authorId,
+            QuestionUpdateDto dto)
         {
             var question = await _context.Questions
                 .Include(q => q.QuestionOptions)
                 .FirstOrDefaultAsync(q => q.Id == id && q.AuthorId == authorId);
 
-            if (question == null) return null;
+            if (question == null)
+                return null;
 
+            // -------- Question --------
             if (dto.QuestionText != null)
                 question.QuestionText = dto.QuestionText;
 
             if (dto.TypeId.HasValue)
                 question.TypeId = dto.TypeId.Value;
 
+            // -------- Options --------
             if (dto.Options != null)
             {
-                _context.QuestionOptions.RemoveRange(question.QuestionOptions);
+                var incomingIds = dto.Options
+                    .Where(o => o.Id.HasValue)
+                    .Select(o => o.Id!.Value)
+                    .ToHashSet();
 
+                // 🗑 Remover opções que já não existem no DTO
+                var toRemove = question.QuestionOptions
+                    .Where(o => !incomingIds.Contains(o.Id))
+                    .ToList();
+
+                _context.QuestionOptions.RemoveRange(toRemove);
+
+                // ✏️ Actualizar opções existentes + ➕ novas
                 foreach (var opt in dto.Options)
                 {
-                    question.QuestionOptions.Add(new QuestionOption
+                    if (opt.Id.HasValue)
                     {
-                        Id = Guid.NewGuid(),
-                        OptionText = opt.OptionText,
-                        IsCorrect = opt.IsCorrect,
-                        CorrectOrder = opt.CorrectOrder
-                    });
+                        var existing = question.QuestionOptions
+                            .FirstOrDefault(o => o.Id == opt.Id.Value);
+
+                        if (existing == null)
+                            continue; // segurança extra
+
+                        existing.OptionText = opt.OptionText;
+                        existing.IsCorrect = opt.IsCorrect;
+                        existing.CorrectOrder = opt.CorrectOrder;
+                    }
+                    else
+                    {
+                        question.QuestionOptions.Add(new QuestionOption
+                        {
+                            Id = Guid.NewGuid(),
+                            QuestionId = question.Id,
+                            OptionText = opt.OptionText,
+                            IsCorrect = opt.IsCorrect,
+                            CorrectOrder = opt.CorrectOrder
+                        });
+                    }
                 }
             }
 
-            question.UpdatedAt = DateTime.UtcNow;
+            question.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // opcional: traduzir para 409 Conflict
+                throw;
+            }
+
             return await BuildQuestionDto(id);
         }
+
 
         // -------------------------------------------------------
         // DELETE
