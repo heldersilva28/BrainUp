@@ -8,6 +8,7 @@ import QuizBuilderPage from "./pages/QuizBuilderPage";
 import HomeSessionPage from "./pages/HomeSessionPage";
 import WaitingSessionPage from "./pages/WaitingSessionPage";
 import VerQuiz from "./pages/VerQuiz";
+import QuizEditorPage from "./pages/QuizEditorPage";
 
 const App: React.FC = () => {
   return (
@@ -21,6 +22,7 @@ const App: React.FC = () => {
         <Route path="/quiz-builder" element={<QuizBuilderPage />} />
         <Route path="/session-waiting" element={<WaitingSessionPage />} />
         <Route path="/ver-quiz" element={<VerQuiz />} />
+        <Route path="/quiz-editor/:quizId" element={<QuizEditorPage />} />
       </Routes>
     </Router>
   );

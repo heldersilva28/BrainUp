@@ -27,7 +27,7 @@ const DashboardPage: FC = () => {
     "projects"
   );
   const [activeProjectTab, setActiveProjectTab] = useState<
-    "import" | "library"
+    "import" | "library" | "create"
   >("import");
   const [activeFolder, setActiveFolder] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -50,6 +50,10 @@ const DashboardPage: FC = () => {
   const [editingQuizId, setEditingQuizId] = useState<string>("");
   const [editingQuizTitle, setEditingQuizTitle] = useState("");
   const [editingQuizDescription, setEditingQuizDescription] = useState("");
+  const [newQuizTitle, setNewQuizTitle] = useState("");
+  const [newQuizDescription, setNewQuizDescription] = useState("");
+  const [createQuizError, setCreateQuizError] = useState<string | null>(null);
+  const [createQuizSubmitting, setCreateQuizSubmitting] = useState(false);
 
   const [sessionFolder, setSessionFolder] = useState<string>("");
   const [sessionQuiz, setSessionQuiz] = useState<string>("");
@@ -277,6 +281,56 @@ const DashboardPage: FC = () => {
     } catch (err) {
       console.error("Erro ao editar quiz:", err);
       alert("Erro ao editar quiz. Tenta novamente.");
+    }
+  };
+
+  const createQuiz = async () => {
+    if (!activeFolder) {
+      setCreateQuizError("Seleciona uma pasta primeiro.");
+      return;
+    }
+    if (!newQuizTitle.trim()) {
+      setCreateQuizError("Escreve o nome do quiz.");
+      return;
+    }
+
+    setCreateQuizError(null);
+    setCreateQuizSubmitting(true);
+
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/Quizzes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newQuizTitle.trim(),
+          description: newQuizDescription.trim() || null,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Erro ao criar quiz");
+
+      const data = await res.json();
+      const quizId = data?.id;
+      if (!quizId) throw new Error("Quiz ID em falta");
+
+      const folderRes = await authFetch(
+        `${apiBaseUrl}/api/Quizzes/${quizId}/folder?folderId=${activeFolder}`,
+        { method: "PUT" }
+      );
+      if (!folderRes.ok) throw new Error("Erro ao associar pasta");
+
+      const quizTitle = newQuizTitle.trim();
+      const quizDescription = newQuizDescription.trim();
+      setNewQuizTitle("");
+      setNewQuizDescription("");
+      navigate(`/quiz-editor/${quizId}`, {
+        state: { title: quizTitle, description: quizDescription },
+      });
+    } catch (err) {
+      console.error("Erro ao criar quiz:", err);
+      setCreateQuizError("Erro ao criar quiz. Tenta novamente.");
+    } finally {
+      setCreateQuizSubmitting(false);
     }
   };
 
@@ -716,6 +770,17 @@ const DashboardPage: FC = () => {
                 <>
                   <button
                     type="button"
+                    onClick={() => setActiveProjectTab("create")}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                      activeProjectTab === "create"
+                        ? "bg-white/20 text-white shadow-sm"
+                        : "text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Criar quiz
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setActiveProjectTab("import")}
                     className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
                       activeProjectTab === "import"
@@ -934,6 +999,77 @@ const DashboardPage: FC = () => {
                 </div>
 
                 <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
+                    {activeProjectTab === "create" && (
+                    <>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold">Criar quiz</h2>
+                        <p className="text-sm text-white/70">
+                          Pasta selecionada: {selectedFolderName}
+                        </p>
+                      </div>
+                    </div>
+
+                    {!activeFolder && (
+                      <div className="mt-4 rounded-2xl border border-yellow-400/40 bg-yellow-400/10 p-4 text-sm text-yellow-200">
+                        Seleciona uma pasta na coluna da esquerda para continuar.
+                      </div>
+                    )}
+
+                    {createQuizError && (
+                      <div className="mt-4 rounded-2xl border border-red-400/40 bg-red-400/10 p-4 text-sm text-red-200">
+                        {createQuizError}
+                      </div>
+                    )}
+
+                    <div className="mt-6 space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-white/80">
+                          Nome do quiz
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Historia moderna - nivel medio"
+                          value={newQuizTitle}
+                          onChange={(e) => setNewQuizTitle(e.target.value)}
+                          className="w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-white/80">
+                          Descricao (opcional)
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder="Explica o objetivo do quiz e o tema."
+                          value={newQuizDescription}
+                          onChange={(e) => setNewQuizDescription(e.target.value)}
+                          className="w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="rounded-2xl border border-white/20 bg-white/5 p-4 text-xs text-white/70">
+                          Depois vais adicionar as perguntas.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={createQuiz}
+                          disabled={
+                            !activeFolder ||
+                            !newQuizTitle.trim() ||
+                            createQuizSubmitting
+                          }
+                          className="rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {createQuizSubmitting ? "A criar..." : "Continuar"}
+                        </button>
+                      </div>
+                    </div>
+                    </>
+                    )}
+
                     {activeProjectTab === "import" && (
                     <>
                     <div className="flex items-start justify-between">
