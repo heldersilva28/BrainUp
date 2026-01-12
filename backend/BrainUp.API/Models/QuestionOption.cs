@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace BrainUp.API.Models;
 
@@ -17,5 +18,6 @@ public partial class QuestionOption
 
     public virtual ICollection<PlayerAnswer> PlayerAnswers { get; set; } = new List<PlayerAnswer>();
 
+    [JsonIgnore]
     public virtual Question? Question { get; set; }
 }

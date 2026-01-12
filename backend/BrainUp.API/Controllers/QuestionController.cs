@@ -17,6 +17,18 @@ namespace BrainUp.API.Controllers
             return Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         }
 
+        [HttpPost("{questionId}/options")]
+        [Authorize]
+        public async Task<IActionResult> AddOptionToQuestion(Guid questionId, [FromBody] QuestionOptionDto dto)
+        {
+            var option = await _service.AddOptionToQuestion(questionId, dto);
+
+            if (option == null)
+                return NotFound("Question not found.");
+
+            return Ok(option);
+        }
+
         // -------------------------------------------------------
         // CREATE
         // -------------------------------------------------------

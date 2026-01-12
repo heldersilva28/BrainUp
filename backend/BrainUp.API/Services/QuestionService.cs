@@ -9,6 +9,30 @@ namespace BrainUp.API.Services
     {
         private readonly BrainUpContext _context = context;
 
+        //adicionar opção de resposta ao quiz
+        public async Task<QuestionOption?> AddOptionToQuestion(Guid questionId, QuestionOptionDto dto)
+        {
+            var question = await _context.Questions
+                .FirstOrDefaultAsync(q => q.Id == questionId);
+
+            if (question == null)
+                return null;
+
+            var option = new QuestionOption
+            {
+                Id = Guid.NewGuid(),
+                QuestionId = questionId,
+                OptionText = dto.OptionText,
+                IsCorrect = dto.IsCorrect,
+                CorrectOrder = dto.CorrectOrder
+            };
+
+            _context.QuestionOptions.Add(option);
+            await _context.SaveChangesAsync();
+
+            return option;
+        }
+
         // -------------------------------------------------------
         // CREATE
         // -------------------------------------------------------
