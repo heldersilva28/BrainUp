@@ -85,7 +85,7 @@ namespace BrainUp.API.Services
                 SessionId = sessionId,
                 RoundNumber = dto.RoundNumber,
                 QuestionId = dto.QuestionId,
-                StartedAt = DateTime.UtcNow
+                StartedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
             };
 
             _context.GameRounds.Add(round);
@@ -124,7 +124,7 @@ namespace BrainUp.API.Services
                 PlayerId = playerId,
                 OptionId = dto.OptionId,
                 IsCorrect = isCorrect,
-                AnsweredAt = DateTime.UtcNow
+                AnsweredAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
             });
 
             if (isCorrect)
@@ -151,7 +151,7 @@ namespace BrainUp.API.Services
             if (session == null) return false;
 
             session.IsActive = false;
-            session.EndedAt = DateTime.UtcNow;
+            session.EndedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
             await _context.SaveChangesAsync();
             return true;
