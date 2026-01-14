@@ -53,20 +53,50 @@ namespace BrainUp.API.Services
                 TypeId = dto.TypeId
             };
 
-            // adicionar opções
-            foreach (var opt in dto.Options)
-            {
-                question.QuestionOptions.Add(new QuestionOption
-                {
-                    Id = Guid.NewGuid(),
-                    OptionText = opt.OptionText,
-                    IsCorrect = opt.IsCorrect,
-                    CorrectOrder = opt.CorrectOrder
-                });
-            }
-
             _context.Questions.Add(question);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(); // Guardar a pergunta primeiro
+
+            // Para True/False, garantir ordem específica: True primeiro, False segundo
+            if (type.Name.Equals("true_false", StringComparison.OrdinalIgnoreCase))
+            {
+                // Ordenar opções: True primeiro, False segundo
+                var orderedOptions = dto.Options
+                    .OrderByDescending(opt => opt.OptionText.Equals("True", StringComparison.OrdinalIgnoreCase) || 
+                                              opt.OptionText.Equals("Verdadeiro", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                // Adicionar uma a uma para garantir ordem
+                foreach (var opt in orderedOptions)
+                {
+                    var option = new QuestionOption
+                    {
+                        Id = Guid.NewGuid(),
+                        QuestionId = question.Id,
+                        OptionText = opt.OptionText,
+                        IsCorrect = opt.IsCorrect,
+                        CorrectOrder = null
+                    };
+                    _context.QuestionOptions.Add(option);
+                    await _context.SaveChangesAsync(); // Guardar uma a uma
+                }
+            }
+            else
+            {
+                // Para outros tipos, manter ordem original e adicionar uma a uma
+                foreach (var opt in dto.Options)
+                {
+                    var option = new QuestionOption
+                    {
+                        Id = Guid.NewGuid(),
+                        QuestionId = question.Id,
+                        OptionText = opt.OptionText,
+                        IsCorrect = opt.IsCorrect,
+                        CorrectOrder = opt.CorrectOrder
+                    };
+                    _context.QuestionOptions.Add(option);
+                    await _context.SaveChangesAsync(); // Guardar uma a uma
+                }
+            }
 
             return await BuildQuestionDto(question.Id);
         }
@@ -77,6 +107,40 @@ namespace BrainUp.API.Services
         public async Task<QuestionDto?> GetById(Guid id)
         {
             return await BuildQuestionDto(id);
+        }
+
+        //delete opção de pergunta
+        public async Task<bool> RemoveOptionFromQuestion(Guid questionId, Guid optionId)
+        {
+            var option = await _context.QuestionOptions
+                .FirstOrDefaultAsync(o => o.Id == optionId && o.QuestionId == questionId);
+
+            
+            if (option == null)
+                return false;
+
+            _context.QuestionOptions.Remove(option);
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        //alterar opção de pergunta
+        public async Task<QuestionOption?> UpdateOptionOfQuestion(Guid questionId, Guid optionId, QuestionOptionDto dto)
+        {
+            var option = await _context.QuestionOptions
+                .FirstOrDefaultAsync(o => o.Id == optionId && o.QuestionId == questionId);
+
+            if (option == null)
+                return null;
+
+            option.OptionText = dto.OptionText;
+            option.IsCorrect = dto.IsCorrect;
+            option.CorrectOrder = dto.CorrectOrder;
+
+            await _context.SaveChangesAsync();
+
+            return option;
         }
 
         // -------------------------------------------------------
@@ -91,19 +155,31 @@ namespace BrainUp.API.Services
                 .OrderByDescending(q => q.CreatedAt)
                 .ToListAsync();
 
-            return [.. list.Select(q => new QuestionDto
-            {
-                Id = q.Id,
-                QuestionText = q.QuestionText,
-                Type = q.Type.Name,
-                CreatedAt = q.CreatedAt,
-                Options = [.. q.QuestionOptions.Select(o => new QuestionOptionResponseDto
+            return [.. list.Select(q => {
+                // Ordenar opções baseado no tipo
+                var orderedOptions = q.Type.Name.Equals("true_false", StringComparison.OrdinalIgnoreCase)
+                    ? q.QuestionOptions
+                        .OrderByDescending(o => o.OptionText.Equals("True", StringComparison.OrdinalIgnoreCase) ||
+                                               o.OptionText.Equals("Verdadeiro", StringComparison.OrdinalIgnoreCase))
+                        .ToList()
+                    : q.QuestionOptions
+                        .OrderBy(o => o.Id)
+                        .ToList();
+
+                return new QuestionDto
                 {
-                    Id = o.Id,
-                    OptionText = o.OptionText,
-                    IsCorrect = o.IsCorrect ?? false,
-                    CorrectOrder = o.CorrectOrder
-                })]
+                    Id = q.Id,
+                    QuestionText = q.QuestionText,
+                    Type = q.Type.Name,
+                    CreatedAt = q.CreatedAt,
+                    Options = [.. orderedOptions.Select(o => new QuestionOptionResponseDto
+                    {
+                        Id = o.Id,
+                        OptionText = o.OptionText,
+                        IsCorrect = o.IsCorrect ?? false,
+                        CorrectOrder = o.CorrectOrder
+                    })]
+                };
             })];
         }
 
@@ -128,20 +204,35 @@ namespace BrainUp.API.Services
                 .Where(q => questionIds.Contains(q.Id))
                 .ToListAsync();
 
-            return questions.Select(q => new QuestionDto
-            {
-                Id = q.Id,
-                QuestionText = q.QuestionText,
-                Type = q.Type.Name,
-                CreatedAt = q.CreatedAt,
-                Options = q.QuestionOptions.Select(o => new QuestionOptionResponseDto
+            return questions.Select(q => {
+                // Ordenar opções baseado no tipo
+                var orderedOptions = q.Type.Name.Equals("true_false", StringComparison.OrdinalIgnoreCase)
+                    ? q.QuestionOptions
+                        .OrderByDescending(o => o.OptionText.Equals("True", StringComparison.OrdinalIgnoreCase) || 
+                                               o.OptionText.Equals("Verdadeiro", StringComparison.OrdinalIgnoreCase))
+                        .ToList()
+                    : q.QuestionOptions
+                        .OrderBy(o => o.Id)
+                        .ToList();
+
+                return new QuestionDto
                 {
-                    Id = o.Id,
-                    OptionText = o.OptionText,
-                    IsCorrect = o.IsCorrect ?? false,
-                    CorrectOrder = o.CorrectOrder
-                }).ToList(),
-                Order = questionIds.IndexOf(q.Id)
+                    Id = q.Id,
+                    QuestionText = q.QuestionText,
+                    Type = q.Type.Name,
+                    CreatedAt = q.CreatedAt,
+                    Options = orderedOptions.Select(o => new QuestionOptionResponseDto
+                    {
+                        Id = o.Id,
+                        OptionText = o.OptionText,
+                        IsCorrect = o.IsCorrect ?? false,
+                        CorrectOrder = o.CorrectOrder
+                    }).ToList(),
+                    Order = _context.QuizQuestions
+                        .Where(qq => qq.QuizId == quizId && qq.QuestionId == q.Id)
+                        .Select(qq => qq.QuestionOrder)
+                        .FirstOrDefault()
+                };
             }).ToList();
         }
 
@@ -256,13 +347,33 @@ namespace BrainUp.API.Services
 
             if (q == null) return null;
 
+            // Ordenar opções baseado no tipo
+            List<QuestionOption> orderedOptions;
+            
+            if (q.Type.Name.Equals("true_false", StringComparison.OrdinalIgnoreCase))
+            {
+                // True/False: True primeiro, False segundo
+                orderedOptions = q.QuestionOptions
+                    .OrderByDescending(o => o.OptionText.Equals("True", StringComparison.OrdinalIgnoreCase) || 
+                                           o.OptionText.Equals("Verdadeiro", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            else
+            {
+                // Para outros tipos: ordenar por ID (ordem de inserção na BD)
+                // Como GUIDs são gerados sequencialmente pelo SQL Server, podemos usar ToString() para ordenar
+                orderedOptions = q.QuestionOptions
+                    .OrderBy(o => o.Id)
+                    .ToList();
+            }
+
             return new QuestionDto
             {
                 Id = q.Id,
                 QuestionText = q.QuestionText,
                 Type = q.Type.Name,
                 CreatedAt = q.CreatedAt,
-                Options = [.. q.QuestionOptions.Select(o => new QuestionOptionResponseDto
+                Options = [.. orderedOptions.Select(o => new QuestionOptionResponseDto
                 {
                     Id = o.Id,
                     OptionText = o.OptionText,

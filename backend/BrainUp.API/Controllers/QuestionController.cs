@@ -81,6 +81,32 @@ namespace BrainUp.API.Controllers
             return Ok(questions);
         }
 
+        //remover opção de pergunta
+        [HttpDelete("{questionId}/options/{optionId}")]
+        [Authorize]
+        public async Task<IActionResult> RemoveOptionFromQuestion(Guid questionId, Guid optionId)
+        {
+            var success = await _service.RemoveOptionFromQuestion(questionId, optionId);
+
+            if (!success)
+                return NotFound("Question or option not found.");
+
+            return Ok();
+        }
+
+        //alterar opção de pergunta
+        [HttpPut("{questionId}/options/{optionId}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateOptionOfQuestion(Guid questionId, Guid optionId, [FromBody] QuestionOptionDto dto)
+        {
+            var updatedOption = await _service.UpdateOptionOfQuestion(questionId, optionId, dto);
+
+            if (updatedOption == null)
+                return NotFound("Question or option not found.");
+
+            return Ok(updatedOption);
+        }
+
 
         // -------------------------------------------------------
         // UPDATE

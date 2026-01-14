@@ -220,6 +220,7 @@ namespace BrainUp.API.Services
             };
 
             _context.Questions.Add(question);
+            await _context.SaveChangesAsync(); // Guardar a pergunta primeiro
 
             // Adicionar opções (filtrar vazias)
             if (q.Options == null || q.Options.Count == 0)
@@ -251,16 +252,49 @@ namespace BrainUp.API.Services
                     throw new Exception($"As opções de ordenação possuem ordens duplicadas: {string.Join(", ", duplicateOrders)}");
             }
 
-            foreach (var op in validOptions)
+            // Para True/False, garantir ordem: True primeiro, False segundo
+            if (isTrueFalseQuestion)
             {
-                _context.QuestionOptions.Add(new QuestionOption
+                var orderedTrueFalse = validOptions
+                    .OrderByDescending(op => op.Text.Equals("True", StringComparison.OrdinalIgnoreCase) || 
+                                            op.Text.Equals("Verdadeiro", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                
+                // Adicionar uma a uma para garantir ordem
+                foreach (var op in orderedTrueFalse)
                 {
-                    Id = Guid.NewGuid(),
-                    QuestionId = question.Id,
-                    OptionText = op.Text.Trim(),
-                    IsCorrect = isOrderingQuestion ? null : op.Correct,
-                    CorrectOrder = isOrderingQuestion ? op.Order : null
-                });
+                    var option = new QuestionOption
+                    {
+                        Id = Guid.NewGuid(),
+                        QuestionId = question.Id,
+                        OptionText = op.Text.Trim(),
+                        IsCorrect = op.Correct,
+                        CorrectOrder = null
+                    };
+                    _context.QuestionOptions.Add(option);
+                    await _context.SaveChangesAsync(); // Guardar uma a uma
+                }
+            }
+            else
+            {
+                // Para outros tipos, manter ordem original do ficheiro
+                // Adicionar uma a uma para garantir a ordem de inserção
+                foreach (var op in validOptions)
+                {
+                    var option = new QuestionOption
+                    {
+                        Id = Guid.NewGuid(),
+                        QuestionId = question.Id,
+                        OptionText = op.Text.Trim(),
+                        IsCorrect = isOrderingQuestion ? null : op.Correct,
+                        CorrectOrder = isOrderingQuestion ? op.Order : null
+                    };
+                    _context.QuestionOptions.Add(option);
+                    await _context.SaveChangesAsync(); // Guardar uma a uma
+                    
+                    // Pequeno delay para garantir GUIDs sequenciais diferentes
+                    await Task.Delay(1);
+                }
             }
 
             // Associar pergunta ao quiz
@@ -277,7 +311,6 @@ namespace BrainUp.API.Services
 
             await _context.SaveChangesAsync();
         }
-
 
         // -------------------------------------------------------
         // DTOs INTERNOS

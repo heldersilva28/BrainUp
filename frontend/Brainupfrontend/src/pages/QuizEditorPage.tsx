@@ -1,8 +1,9 @@
 import type { FC } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { useAuthGuard } from "../hooks/useAuthGuard";
+import ConfirmModal from "../components/ConfirmModal";
 
 interface QuestionType {
   id: number;
@@ -14,9 +15,6 @@ interface QuestionSummary {
   text: string;
   type: string;
 }
-
-const emptyOptions = () =>
-  Array.from({ length: 4 }).map(() => ({ text: "", isCorrect: false }));
 
 const QuizEditorPage: FC = () => {
   useAuthGuard();
@@ -33,38 +31,50 @@ const QuizEditorPage: FC = () => {
     (location.state as { description?: string })?.description ?? ""
   );
   const [types, setTypes] = useState<QuestionType[]>([]);
-  const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null);
-  const [questionText, setQuestionText] = useState("");
-  const [multiOptions, setMultiOptions] = useState(emptyOptions());
-  const [trueFalseCorrect, setTrueFalseCorrect] = useState<"true" | "false">(
-    "true"
-  );
-  const [orderingOptions, setOrderingOptions] = useState(
-    Array.from({ length: 4 }).map((_, index) => ({
-      text: "",
-      order: index + 1,
-    }))
-  );
   const [questions, setQuestions] = useState<QuestionSummary[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const selectedTypeName = useMemo(() => {
-    return (
-      types.find((type) => type.id === selectedTypeId)?.name?.toLowerCase() ??
-      ""
-    );
-  }, [types, selectedTypeId]);
-
-  const isOrdering =
-    selectedTypeName.includes("order") || selectedTypeName.includes("ordem");
-  const isTrueFalse =
-    selectedTypeName.includes("true") ||
-    selectedTypeName.includes("false") ||
-    selectedTypeName.includes("verdad");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newQuestion, setNewQuestion] = useState<{
+    questionText: string;
+    typeId: string;
+    options: Array<{
+      optionText: string;
+      isCorrect: boolean;
+      correctOrder?: number;
+    }>;
+  }>({
+    questionText: "",
+    typeId: "1",
+    options: [
+      { optionText: "", isCorrect: false },
+      { optionText: "", isCorrect: false }
+    ]
+  });
+  const [creating, setCreating] = useState(false);
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'confirm' | 'alert' | 'error' | 'success';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'alert',
+    onConfirm: () => {},
+  });
 
   const token = sessionStorage.getItem("brainup_token");
+
+  const showAlert = (title: string, message: string, type: 'alert' | 'error' | 'success' = 'alert') => {
+    setModalState({
+      isOpen: true,
+      title,
+      message,
+      type,
+      onConfirm: () => setModalState(prev => ({ ...prev, isOpen: false })),
+    });
+  };
 
   useEffect(() => {
     const fetchTypes = async () => {
@@ -78,12 +88,6 @@ const QuizEditorPage: FC = () => {
 
     fetchTypes();
   }, [apiBaseUrl]);
-
-  useEffect(() => {
-    if (!selectedTypeId && types.length > 0) {
-      setSelectedTypeId(types[0].id);
-    }
-  }, [types, selectedTypeId]);
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -124,144 +128,213 @@ const QuizEditorPage: FC = () => {
     fetchQuestions();
   }, [apiBaseUrl, quizDescription, quizId, quizTitle, token]);
 
-  const handleSaveQuestion = async () => {
+  const handleAddNewQuestion = () => {
+    setShowAddModal(true);
+    setNewQuestion({
+      questionText: "",
+      typeId: "1",
+      options: [
+        { optionText: "", isCorrect: false },
+        { optionText: "", isCorrect: false }
+      ]
+    });
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setNewQuestion({
+      questionText: "",
+      typeId: "1",
+      options: [
+        { optionText: "", isCorrect: false },
+        { optionText: "", isCorrect: false }
+      ]
+    });
+  };
+
+  const handleTypeChange = (typeId: string) => {
+    if (typeId === "2") { // true_false
+      setNewQuestion({
+        ...newQuestion,
+        typeId,
+        options: [
+          { optionText: "Verdadeiro", isCorrect: false },
+          { optionText: "Falso", isCorrect: false }
+        ]
+      });
+    } else if (typeId === "3") { // ordering
+      setNewQuestion({
+        ...newQuestion,
+        typeId,
+        options: [
+          { optionText: "", isCorrect: false, correctOrder: 1 },
+          { optionText: "", isCorrect: false, correctOrder: 2 }
+        ]
+      });
+    } else { // multiple_choice
+      setNewQuestion({
+        ...newQuestion,
+        typeId,
+        options: [
+          { optionText: "", isCorrect: false },
+          { optionText: "", isCorrect: false }
+        ]
+      });
+    }
+  };
+
+  const handleAddOptionToNew = () => {
+    const isOrdering = newQuestion.typeId === "3";
+    const newOption = {
+      optionText: "",
+      isCorrect: false,
+      ...(isOrdering && { correctOrder: newQuestion.options.length + 1 })
+    };
+    setNewQuestion({
+      ...newQuestion,
+      options: [...newQuestion.options, newOption]
+    });
+  };
+
+  const handleRemoveOptionFromNew = (index: number) => {
+    if (newQuestion.options.length <= 2) {
+      showAlert('Mínimo de Opções', 'Deve ter pelo menos 2 opções', 'alert');
+      return;
+    }
+    const newOptions = newQuestion.options.filter((_, i) => i !== index);
+    setNewQuestion({
+      ...newQuestion,
+      options: newOptions
+    });
+  };
+
+  const handleNewOptionChange = (index: number, field: string, value: any) => {
+    const newOptions = [...newQuestion.options];
+    
+    // Para multiple choice e true_false, apenas uma opção pode ser correta
+    if (field === "isCorrect" && value === true && (newQuestion.typeId === "1" || newQuestion.typeId === "2")) {
+      newOptions.forEach((opt, i) => {
+        if (i !== index) {
+          opt.isCorrect = false;
+        }
+      });
+    }
+    
+    newOptions[index] = { ...newOptions[index], [field]: value };
+    setNewQuestion({
+      ...newQuestion,
+      options: newOptions
+    });
+  };
+
+  const handleCreateQuestion = async () => {
     if (!quizId) {
-      setError("Quiz invalido.");
-      return;
-    }
-    if (!token) {
-      setError("Sessao expirada. Faz login novamente.");
-      return;
-    }
-    if (!questionText.trim()) {
-      setError("Escreve o texto da pergunta.");
-      return;
-    }
-    if (!selectedTypeId) {
-      setError("Seleciona o tipo de pergunta.");
+      showAlert('Erro', 'Quiz inválido', 'error');
       return;
     }
 
-    setError(null);
-    setNotice(null);
-    setIsSaving(true);
+    // Validações
+    if (!newQuestion.questionText.trim()) {
+      showAlert('Campo Obrigatório', 'O texto da pergunta é obrigatório', 'alert');
+      return;
+    }
+
+    const validOptions = newQuestion.options.filter(opt => opt.optionText.trim() !== "");
+    if (validOptions.length < 2) {
+      showAlert('Opções Insuficientes', 'A pergunta deve ter pelo menos 2 opções válidas', 'alert');
+      return;
+    }
+
+    // Para multiple_choice e true_false, pelo menos uma deve ser correta
+    if (newQuestion.typeId !== "3" && !validOptions.some(opt => opt.isCorrect)) {
+      showAlert('Resposta Correta', 'Pelo menos uma opção deve ser marcada como correta', 'alert');
+      return;
+    }
+
+    // Para ordering, verificar se todas têm correctOrder
+    if (newQuestion.typeId === "3") {
+      const hasInvalidOrder = validOptions.some(opt => !opt.correctOrder);
+      if (hasInvalidOrder) {
+        showAlert('Ordem Inválida', 'Todas as opções de ordenação devem ter uma ordem definida', 'alert');
+        return;
+      }
+    }
 
     try {
-      let options: {
-        optionText: string;
-        isCorrect?: boolean;
-        correctOrder?: number;
-      }[] = [];
+      setCreating(true);
 
-      if (isTrueFalse) {
-        options = [
-          { optionText: "Verdadeiro", isCorrect: trueFalseCorrect === "true" },
-          { optionText: "Falso", isCorrect: trueFalseCorrect === "false" },
-        ];
-      } else if (isOrdering) {
-        const hasEmpty = orderingOptions.some((opt) => !opt.text.trim());
-        if (hasEmpty) {
-          setError("Preenche todos os itens da ordem.");
-          setIsSaving(false);
-          return;
-        }
-        options = orderingOptions.map((opt) => ({
-          optionText: opt.text.trim(),
-          correctOrder: opt.order,
-        }));
-      } else {
-        const hasEmpty = multiOptions.some((opt) => !opt.text.trim());
-        if (hasEmpty) {
-          setError("Preenche todas as opcoes.");
-          setIsSaving(false);
-          return;
-        }
-        if (!multiOptions.some((opt) => opt.isCorrect)) {
-          setError("Escolhe a resposta correta.");
-          setIsSaving(false);
-          return;
-        }
-        options = multiOptions.map((opt) => ({
-          optionText: opt.text.trim(),
-          isCorrect: opt.isCorrect,
-        }));
-      }
+      // 1. Criar a pergunta
+      const questionPayload = {
+        questionText: newQuestion.questionText,
+        typeId: parseInt(newQuestion.typeId),
+        options: validOptions.map(opt => ({
+          optionText: opt.optionText,
+          isCorrect: newQuestion.typeId === "3" ? null : opt.isCorrect,
+          correctOrder: newQuestion.typeId === "3" ? opt.correctOrder : null
+        }))
+      };
 
-      const questionResponse = await axios.post(
+      const createResponse = await axios.post(
         `${apiBaseUrl}/api/Questions`,
-        {
-          questionText: questionText.trim(),
-          typeId: selectedTypeId,
-          options,
-        },
+        questionPayload,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      const questionId = questionResponse.data?.id;
-      if (!questionId) {
-        setError("Nao foi possivel criar a pergunta.");
-        return;
-      }
+      const createdQuestion = createResponse.data;
 
+      // 2. Adicionar a pergunta ao quiz
+      const nextOrder = questions.length + 1;
       await axios.post(
         `${apiBaseUrl}/api/Quizzes/${quizId}/questions/add`,
         {
-          questionId,
-          order: questions.length + 1,
+          questionId: createdQuestion.id,
+          order: nextOrder
         },
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      setQuestions((prev) => [
-        ...prev,
-        {
-          id: questionId,
-          text: questionText.trim(),
-          type: questionResponse.data?.type ?? "Pergunta",
-        },
-      ]);
-      setQuestionText("");
-      setMultiOptions(emptyOptions());
-      setTrueFalseCorrect("true");
-      setOrderingOptions(
-        Array.from({ length: 4 }).map((_, index) => ({
-          text: "",
-          order: index + 1,
-        }))
-      );
-      setNotice("Pergunta adicionada ao quiz.");
+      // 3. Atualizar lista de perguntas
+      setQuestions(prev => [...prev, {
+        id: createdQuestion.id,
+        text: newQuestion.questionText.trim(),
+        type: createdQuestion.type ?? "Pergunta"
+      }]);
+
+      handleCloseAddModal();
+      showAlert('Sucesso', 'Pergunta adicionada ao quiz!', 'success');
+
     } catch (err) {
+      console.error('[handleCreateQuestion] Erro crítico:', err);
       if (axios.isAxiosError(err)) {
-        const message =
-          typeof err.response?.data === "string"
-            ? err.response.data
-            : "Erro ao guardar pergunta.";
-        setError(message);
+        const message = typeof err.response?.data === "string"
+          ? err.response.data
+          : "Erro ao criar pergunta";
+        showAlert('Erro', message, 'error');
       } else {
-        setError("Erro ao guardar pergunta.");
+        showAlert('Erro', 'Erro ao criar pergunta', 'error');
       }
     } finally {
-      setIsSaving(false);
+      setCreating(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
-      <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="rounded-3xl border border-white/20 bg-white/10 p-5 backdrop-blur-md shadow-2xl">
+    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-purple-800 via-indigo-800 to-pink-800 text-white">
+      <div className="flex min-h-screen w-full flex-col gap-8 px-4 py-12 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        <header className="rounded-3xl border border-white/30 bg-gradient-to-br from-white/15 to-white/5 p-8 backdrop-blur-xl shadow-2xl">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-white/60">
+              <p className="text-xs uppercase tracking-[0.3em] text-purple-200/70 font-bold">
                 Criar quiz
               </p>
-              <h1 className="mt-2 text-2xl font-black sm:text-3xl">
+              <h1 className="mt-3 text-3xl font-black sm:text-4xl bg-gradient-to-r from-white to-purple-100 bg-clip-text text-transparent">
                 {quizTitle || "Novo quiz"}
               </h1>
-              <p className="mt-2 text-sm text-white/70 sm:text-base">
+              <p className="mt-3 text-base text-white/80 sm:text-lg leading-relaxed">
                 {quizDescription || "Passo 2 de 2: adiciona perguntas"}
               </p>
             </div>
@@ -269,7 +342,7 @@ const QuizEditorPage: FC = () => {
               <button
                 type="button"
                 onClick={() => navigate("/dashboard")}
-                className="rounded-2xl border border-white/30 px-4 py-2 text-sm font-semibold transition hover:bg-white/10"
+                className="rounded-2xl border-2 border-white/40 px-6 py-3 text-sm font-bold transition-all duration-300 hover:bg-white/15 hover:scale-105"
               >
                 Guardar e sair
               </button>
@@ -277,231 +350,266 @@ const QuizEditorPage: FC = () => {
           </div>
         </header>
 
-        <main className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <section className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
+        <main className="grid gap-6 lg:grid-cols-[1fr_0.8fr]">
+          {/* Seção de informação */}
+          <section className="rounded-3xl border border-white/30 bg-gradient-to-br from-white/15 to-white/5 p-8 backdrop-blur-xl shadow-2xl">
+            <div className="text-center space-y-6">
+              <div className="inline-flex p-6 rounded-full bg-gradient-to-br from-purple-400/30 to-pink-400/30">
+                <svg className="h-20 w-20 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
               <div>
-                <h2 className="text-xl font-bold">Nova pergunta</h2>
-                <p className="text-sm text-white/70">
-                  Define o tipo e as respostas corretas.
+                <h2 className="text-2xl font-black text-white mb-3">Adiciona Perguntas ao Quiz</h2>
+                <p className="text-base text-white/70 leading-relaxed max-w-md mx-auto">
+                  Clica no botão abaixo para adicionar uma nova pergunta ao teu quiz. Podes escolher entre diferentes tipos de perguntas.
                 </p>
               </div>
-              <div className="rounded-xl border border-white/30 px-3 py-1 text-xs">
-                Passo 2/2
-              </div>
-            </div>
-
-            {error && (
-              <div className="mt-4 rounded-2xl border border-red-300/40 bg-red-300/10 px-4 py-3 text-sm text-red-100">
-                {error}
-              </div>
-            )}
-            {notice && (
-              <div className="mt-4 rounded-2xl border border-emerald-300/40 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
-                {notice}
-              </div>
-            )}
-
-            <div className="mt-5 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-white/80">
-                  Tipo de pergunta
-                </label>
-                <select
-                  value={selectedTypeId ?? ""}
-                  onChange={(event) => setSelectedTypeId(Number(event.target.value))}
-                  className="w-full rounded-2xl bg-white/20 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                >
-                  {types.map((type) => (
-                    <option key={type.id} value={type.id} className="text-black">
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-white/80">
-                  Texto da pergunta
-                </label>
-                <textarea
-                  value={questionText}
-                  onChange={(event) => setQuestionText(event.target.value)}
-                  rows={3}
-                  className="w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                  placeholder="Escreve a pergunta principal"
-                />
-              </div>
-
-              {!isOrdering && !isTrueFalse && (
-                <div className="space-y-3">
-                  <p className="text-sm font-semibold text-white/80">
-                    Opcoes (marca a correta)
-                  </p>
-                  {multiOptions.map((option, index) => (
-                    <div
-                      key={`multi-${index}`}
-                      className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3"
-                    >
-                      <input
-                        type="radio"
-                        name="multi-correct"
-                        checked={option.isCorrect}
-                        onChange={() =>
-                          setMultiOptions((prev) =>
-                            prev.map((opt, idx) => ({
-                              ...opt,
-                              isCorrect: idx === index,
-                            }))
-                          )
-                        }
-                        className="h-4 w-4"
-                      />
-                      <input
-                        type="text"
-                        value={option.text}
-                        onChange={(event) =>
-                          setMultiOptions((prev) =>
-                            prev.map((opt, idx) =>
-                              idx === index ? { ...opt, text: event.target.value } : opt
-                            )
-                          )
-                        }
-                        className="flex-1 rounded-xl bg-white/20 px-4 py-2 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                        placeholder={`Opcao ${index + 1}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {isTrueFalse && (
-                <div className="space-y-3">
-                  <p className="text-sm font-semibold text-white/80">
-                    Resposta correta
-                  </p>
-                  {["true", "false"].map((value) => (
-                    <label
-                      key={value}
-                      className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm"
-                    >
-                      <input
-                        type="radio"
-                        name="true-false"
-                        checked={trueFalseCorrect === value}
-                        onChange={() => setTrueFalseCorrect(value as "true" | "false")}
-                        className="h-4 w-4"
-                      />
-                      <span>{value === "true" ? "Verdadeiro" : "Falso"}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              {isOrdering && (
-                <div className="space-y-3">
-                  <p className="text-sm font-semibold text-white/80">
-                    Itens por ordem correta
-                  </p>
-                  {orderingOptions.map((option, index) => (
-                    <div
-                      key={`order-${index}`}
-                      className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3"
-                    >
-                      <input
-                        type="number"
-                        min={1}
-                        max={orderingOptions.length}
-                        value={option.order}
-                        onChange={(event) =>
-                          setOrderingOptions((prev) =>
-                            prev.map((opt, idx) =>
-                              idx === index
-                                ? { ...opt, order: Number(event.target.value) || 1 }
-                                : opt
-                            )
-                          )
-                        }
-                        className="w-16 rounded-xl bg-white/20 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                      />
-                      <input
-                        type="text"
-                        value={option.text}
-                        onChange={(event) =>
-                          setOrderingOptions((prev) =>
-                            prev.map((opt, idx) =>
-                              idx === index ? { ...opt, text: event.target.value } : opt
-                            )
-                          )
-                        }
-                        className="flex-1 rounded-xl bg-white/20 px-4 py-2 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                        placeholder={`Item ${index + 1}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="rounded-2xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-white/70">
-                  Perguntas guardadas: {questions.length}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSaveQuestion}
-                  disabled={isSaving}
-                  className="rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSaving ? "A guardar..." : "Adicionar pergunta"}
-                </button>
-              </div>
+              <button
+                onClick={handleAddNewQuestion}
+                className="rounded-2xl border border-emerald-300/50 bg-gradient-to-r from-emerald-400/30 to-emerald-600/30 px-8 py-4 text-base font-bold text-emerald-50 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-emerald-500/30 flex items-center gap-3 mx-auto"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Adicionar Nova Pergunta
+              </button>
             </div>
           </section>
 
-          <aside className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
-            <div className="flex items-center justify-between">
+          {/* Lista de perguntas */}
+          <aside className="rounded-3xl border border-white/30 bg-gradient-to-br from-white/15 to-white/5 p-6 backdrop-blur-xl shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-bold">Perguntas adicionadas</h3>
+                <h3 className="text-lg font-bold text-white">Perguntas adicionadas</h3>
                 <p className="text-sm text-white/70">
-                  Organiza antes de publicar.
+                  Organiza antes de publicar
                 </p>
               </div>
-              <span className="rounded-xl border border-white/30 px-3 py-1 text-xs">
+              <span className="rounded-2xl border border-purple-300/40 bg-gradient-to-br from-purple-400/30 to-purple-600/20 px-4 py-2 text-sm font-bold shadow-lg">
                 {questions.length}
               </span>
             </div>
 
-            <div className="mt-5 space-y-3">
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
               {questions.length === 0 ? (
-                <div className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4 text-sm text-white/60">
-                  Ainda nao adicionaste perguntas.
+                <div className="rounded-2xl border border-white/20 bg-white/5 px-6 py-8 text-center">
+                  <p className="text-sm text-white/60">Ainda não adicionaste perguntas.</p>
                 </div>
               ) : (
                 questions.map((question, index) => (
                   <div
                     key={question.id}
-                    className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3"
+                    className="rounded-2xl border border-white/20 bg-gradient-to-r from-white/10 to-white/5 px-5 py-4 hover:bg-white/15 transition-all duration-300 hover:scale-[1.02] shadow-md"
                   >
-                    <div className="flex items-center justify-between gap-4 text-sm">
-                      <span className="rounded-lg border border-white/20 bg-white/10 px-2 py-1 text-xs">
-                        {index + 1}
+                    <div className="flex items-center justify-between gap-4 mb-2">
+                      <span className="rounded-xl border border-purple-300/40 bg-purple-400/20 px-3 py-1 text-xs font-bold">
+                        #{index + 1}
                       </span>
-                      <span className="text-xs text-white/60">{question.type}</span>
+                      <span className="text-xs text-white/60 bg-white/10 px-3 py-1 rounded-lg">
+                        {question.type}
+                      </span>
                     </div>
-                    <p className="mt-2 text-sm text-white/80">
+                    <p className="text-sm text-white/90 leading-relaxed line-clamp-2">
                       {question.text}
                     </p>
                   </div>
                 ))
               )}
             </div>
-
-            <div className="mt-6 rounded-2xl border border-white/20 bg-white/5 p-4 text-xs text-white/70">
-              ...
-            </div>
           </aside>
         </main>
       </div>
+
+      {/* Modal Adicionar Pergunta */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-purple-900/95 to-indigo-900/95 rounded-3xl border border-white/30 p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-white">Adicionar Nova Pergunta</h2>
+              <button
+                onClick={handleCloseAddModal}
+                className="rounded-xl p-2 hover:bg-white/10 transition-all"
+                disabled={creating}
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Tipo de Pergunta */}
+              <div className="space-y-3">
+                <label className="text-sm font-bold text-white/90 uppercase tracking-wide">
+                  Tipo de Pergunta
+                </label>
+                <select
+                  value={newQuestion.typeId}
+                  onChange={(e) => handleTypeChange(e.target.value)}
+                  className="w-full rounded-2xl bg-white/25 border-2 border-white/30 px-5 py-4 text-white focus:outline-none focus:ring-4 focus:ring-yellow-300/50 transition-all"
+                  disabled={creating}
+                >
+                  {types.map((type) => (
+                    <option key={type.id} value={type.id} className="bg-purple-900">
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Texto da Pergunta */}
+              <div className="space-y-3">
+                <label className="text-sm font-bold text-white/90 uppercase tracking-wide">
+                  Texto da Pergunta
+                </label>
+                <textarea
+                  value={newQuestion.questionText}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, questionText: e.target.value })}
+                  rows={3}
+                  className="w-full rounded-2xl bg-white/25 border-2 border-white/30 px-5 py-4 text-white placeholder-white/60 focus:outline-none focus:ring-4 focus:ring-yellow-300/50 transition-all"
+                  placeholder="Escreve o texto da pergunta..."
+                  disabled={creating}
+                />
+              </div>
+
+              {/* Opções */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-white/90 uppercase tracking-wide">
+                    Opções de Resposta
+                  </label>
+                  {newQuestion.typeId !== "2" && (
+                    <button
+                      onClick={handleAddOptionToNew}
+                      className="rounded-xl border border-emerald-300/50 bg-emerald-400/20 px-4 py-2 text-sm font-bold text-emerald-50 hover:bg-emerald-400/30 transition-all flex items-center gap-2"
+                      disabled={creating}
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Adicionar
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {newQuestion.options.map((option, index) => (
+                    <div key={index} className="flex items-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-5 py-4">
+                      {newQuestion.typeId === "3" ? (
+                        // Ordenação
+                        <>
+                          <input
+                            type="number"
+                            min={1}
+                            value={option.correctOrder || index + 1}
+                            onChange={(e) => handleNewOptionChange(index, "correctOrder", parseInt(e.target.value))}
+                            className="w-20 rounded-xl bg-white/25 border-2 border-white/30 px-3 py-2 text-white text-center font-bold focus:outline-none focus:ring-2 focus:ring-yellow-300/50"
+                            disabled={creating}
+                          />
+                          <input
+                            type="text"
+                            value={option.optionText}
+                            onChange={(e) => handleNewOptionChange(index, "optionText", e.target.value)}
+                            className="flex-1 rounded-xl bg-white/25 border-2 border-white/30 px-4 py-2 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-yellow-300/50"
+                            placeholder={`Item ${index + 1}`}
+                            disabled={creating}
+                          />
+                        </>
+                      ) : (
+                        // Multiple Choice ou True/False
+                        <>
+                          <input
+                            type="radio"
+                            name="correct-option"
+                            checked={option.isCorrect}
+                            onChange={(e) => handleNewOptionChange(index, "isCorrect", e.target.checked)}
+                            className="h-5 w-5 cursor-pointer accent-yellow-400"
+                            disabled={creating}
+                          />
+                          <input
+                            type="text"
+                            value={option.optionText}
+                            onChange={(e) => handleNewOptionChange(index, "optionText", e.target.value)}
+                            className="flex-1 rounded-xl bg-white/25 border-2 border-white/30 px-4 py-2 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-yellow-300/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                            placeholder={`Opção ${index + 1}`}
+                            disabled={creating || newQuestion.typeId === "2"}
+                          />
+                        </>
+                      )}
+                      {newQuestion.typeId !== "2" && newQuestion.options.length > 2 && (
+                        <button
+                          onClick={() => handleRemoveOptionFromNew(index)}
+                          className="rounded-xl border border-red-300/50 bg-red-400/20 px-3 py-2 text-red-50 hover:bg-red-400/30 transition-all"
+                          disabled={creating}
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {newQuestion.typeId === "2" && (
+                  <p className="text-xs text-white/70 italic bg-white/5 rounded-xl px-4 py-2 border border-white/20 flex items-center gap-2">
+                    <svg className="h-4 w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    Perguntas Verdadeiro/Falso têm opções fixas. Seleciona a resposta correta clicando no círculo.
+                  </p>
+                )}
+              </div>
+
+              {/* Botões */}
+              <div className="flex gap-3 pt-4 border-t border-white/20">
+                <button
+                  onClick={handleCloseAddModal}
+                  className="flex-1 rounded-2xl border-2 border-white/40 px-6 py-3 font-bold hover:bg-white/10 transition-all"
+                  disabled={creating}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateQuestion}
+                  className="flex-1 rounded-2xl bg-gradient-to-r from-yellow-400 via-orange-400 to-orange-500 px-6 py-3 font-bold text-white shadow-xl hover:scale-105 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+                  disabled={creating}
+                >
+                  {creating ? (
+                    <>
+                      <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Criando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Criar Pergunta
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação/Alerta */}
+      <ConfirmModal
+        isOpen={modalState.isOpen}
+        title={modalState.title}
+        message={modalState.message}
+        type={modalState.type}
+        confirmText="OK"
+        cancelText="Cancelar"
+        onConfirm={modalState.onConfirm}
+        onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };
