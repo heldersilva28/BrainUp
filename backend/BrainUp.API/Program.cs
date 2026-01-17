@@ -92,7 +92,13 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // Add SignalR
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true;
+}).AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.PropertyNamingPolicy = null; // Manter PascalCase
+});
 
 // Scoped services
 builder.Services.AddScoped<UserService>();

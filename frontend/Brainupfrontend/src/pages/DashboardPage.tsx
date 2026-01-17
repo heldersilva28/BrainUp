@@ -1,7 +1,8 @@
 import type { FC } from "react";
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuthGuard } from "../hooks/useAuthGuard";
+import { generateSessionCode } from '../utils/sessionUtils';
 
 interface Folder {
   id: string;
@@ -514,6 +515,24 @@ const DashboardPage: FC = () => {
 
   const selectedFolderName = folders.find(f => f.id === activeFolder)?.name || "Nenhuma pasta selecionada";
 
+  const createGameSession = async () => {
+    if (!sessionQuiz) {
+      alert("Seleciona um quiz primeiro");
+      return;
+    }
+
+    try {
+      // Gerar sessionId localmente
+      const sessionId = generateSessionCode();
+      
+      // Navegar diretamente (sem criar na BD por agora)
+      navigate(`/waiting-session/${sessionId}?quizId=${sessionQuiz}`);
+    } catch (err) {
+      console.error("Erro ao criar sessão:", err);
+      alert("Erro ao criar sessão. Tenta novamente.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
       {/* Create Folder Modal */}
@@ -912,8 +931,8 @@ const DashboardPage: FC = () => {
                       className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
                       />
                     </div>
-                    <button type="button" onClick={() => navigate("/session")} className="w-full rounded-2xl border border-white/40 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
-                      Criar sessão
+                    <button type="button" onClick={createGameSession} disabled={!sessionQuiz} className="w-full sm:w-auto rounded-2xl bg-gradient-to-r from-green-400 to-blue-500 px-6 py-3 font-semibold text-white shadow-lg transition hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                      Criar Sessão de Jogo
                     </button>
                   </div>
                 </div>
@@ -1245,7 +1264,7 @@ const DashboardPage: FC = () => {
                             className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-white transition hover:bg-white/10"
                           >
                             <svg className="h-4 w-4 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 002-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
                             Duplicar
                           </button>
