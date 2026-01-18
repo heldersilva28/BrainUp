@@ -24,6 +24,7 @@ const PlayerSessionPage: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState(0);
   const [roundNumber, setRoundNumber] = useState(0);
   const [playerData, setPlayerData] = useState<any>(null);
+  const [confirmedSessionId, setConfirmedSessionId] = useState<string | null>(null); //tirar
   const hasConnectedRef = React.useRef(false);
   
   // Para drag and drop em perguntas de ordenação
@@ -63,6 +64,17 @@ const PlayerSessionPage: React.FC = () => {
       if (!data.playerName || !data.sessionId) {
         navigate('/join-session');
         return;
+      }
+
+      const storedPlayerId =
+        data.playerId || localStorage.getItem('brainup_player_id');
+      const playerId = storedPlayerId ?? crypto.randomUUID();
+      if (!storedPlayerId) {
+        localStorage.setItem('brainup_player_id', playerId);
+      }
+      if (data.playerId !== playerId) {
+        data.playerId = playerId;
+        localStorage.setItem('brainup_player', JSON.stringify(data));
       }
       
       hasConnectedRef.current = true; // 🔒 Marcar como conectado
@@ -152,6 +164,7 @@ const PlayerSessionPage: React.FC = () => {
     newConnection.on('JoinedSuccessfully', (confirmedSessionId: string) => {
       console.log('✅ Joined successfully:', confirmedSessionId);
       setSessionStatus('waiting');
+      setConfirmedSessionId(confirmedSessionId); //tirar
     });
 
     newConnection.on('JoinError', (message: string) => {
@@ -235,13 +248,15 @@ const PlayerSessionPage: React.FC = () => {
 
       console.log('📡 Invoking JoinPlayerByCode:', {
         sessionCode: sessionCode || data.sessionId,
-        playerName: data.playerName
+        playerName: data.playerName,
+        playerId: data.playerId
       });
 
       await newConnection.invoke(
         'JoinPlayerByCode',
         sessionCode || data.sessionId,
-        data.playerName
+        data.playerName,
+        data.playerId
       );
 
       setConnection(newConnection);
@@ -274,9 +289,13 @@ const PlayerSessionPage: React.FC = () => {
 
     setHasAnswered(true);
 
+    const targetSessionId =
+      confirmedSessionId || sessionCode || playerData?.sessionId;
+    if (!targetSessionId) return;
+
     await connection.invoke(
       'PlayerAnswered',
-      sessionCode,
+      targetSessionId,
       connection.connectionId
     );
   };

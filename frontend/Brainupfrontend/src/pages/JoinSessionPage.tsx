@@ -23,10 +23,17 @@ const JoinSessionPage: React.FC = () => {
       // O código inserido será tratado como sessionId
       const sessionId = sessionCode.trim();
       
+      const storedPlayerId = localStorage.getItem('brainup_player_id');
+      const playerId = storedPlayerId ?? crypto.randomUUID();
+      if (!storedPlayerId) {
+        localStorage.setItem('brainup_player_id', playerId);
+      }
+
       // Guardar dados do jogador
       localStorage.setItem('brainup_player', JSON.stringify({
         playerName: playerName.trim(),
-        sessionId: sessionId
+        sessionId: sessionId,
+        playerId: playerId
       }));
       
       navigate(`/player-session/${sessionId}`);

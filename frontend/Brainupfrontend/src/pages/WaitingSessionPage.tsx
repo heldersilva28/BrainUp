@@ -8,6 +8,7 @@ interface Player {
   connectionId: string;
   name: string;
   joinedAt: string;
+  playerId?: string;
 }
 
 interface QuestionOption {
@@ -49,6 +50,18 @@ const WaitingSessionPage: React.FC = () => {
   const [error, setError] = useState<string>('');
 
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5027';
+  const normalizePlayer = (player: any): Player | null => {
+    if (!player) return null;
+    const connectionId = player.connectionId ?? player.ConnectionId ?? '';
+    const playerId = player.playerId ?? player.PlayerId;
+    if (!connectionId && !playerId) return null;
+    return {
+      connectionId,
+      name: player.name ?? player.Name ?? 'Anonimo',
+      joinedAt: player.joinedAt ?? player.JoinedAt ?? new Date().toISOString(),
+      playerId,
+    };
+  };
 
   const authFetch = (url: string, options: RequestInit = {}) => {
     const token = sessionStorage.getItem('brainup_token');
@@ -142,6 +155,13 @@ const WaitingSessionPage: React.FC = () => {
     /* ---------- EVENTOS ---------- */
 
     newConnection.on('SessionCreated', (createdSessionId: string, existingPlayers?: Player[]) => {
+      if (existingPlayers && existingPlayers.length > 0) {
+        const normalizedPlayers = existingPlayers
+          .map(normalizePlayer)
+          .filter((p): p is Player => Boolean(p));
+        setPlayers(normalizedPlayers);
+        return;
+      }
       console.log('✅ Session created:', createdSessionId);
       if (existingPlayers && existingPlayers.length > 0) {
         setPlayers(prev =>
@@ -153,6 +173,29 @@ const WaitingSessionPage: React.FC = () => {
     });
 
     newConnection.on('playerjoined', (player: any) => {
+      const normalizedPlayerData = normalizePlayer(player);
+      if (!normalizedPlayerData) {
+        console.warn('Invalid player data after normalization:', player);
+        return;
+      }
+
+      setPlayers(prev => {
+        if (normalizedPlayerData.playerId) {
+          const existingIndex = prev.findIndex(p => p.playerId === normalizedPlayerData.playerId);
+          if (existingIndex >= 0) {
+            const next = [...prev];
+            next[existingIndex] = { ...prev[existingIndex], ...normalizedPlayerData };
+            return next;
+          }
+        }
+
+        if (prev.some(p => p.connectionId === normalizedPlayerData.connectionId)) {
+          return prev;
+        }
+
+        return [...prev, normalizedPlayerData];
+      });
+      return;
       const normalizedPlayer = {
         connectionId: player.ConnectionId ?? player.connectionId,
         name: player.Name ?? player.name ?? 'Anônimo',
@@ -172,9 +215,21 @@ const WaitingSessionPage: React.FC = () => {
       });
     });
 
-    newConnection.on('PlayerLeft', (player: Player) => {
+    newConnection.on('PlayerLeft', (player: any) => {
       console.log('👋 Player left:', player);
-      setPlayers(prev => prev.filter(p => p.connectionId !== player.connectionId));
+      const leftConnectionId = player?.connectionId ?? player?.ConnectionId;
+      const leftPlayerId = player?.playerId ?? player?.PlayerId;
+      setPlayers(prev =>
+        prev.filter(p => {
+          if (leftPlayerId) {
+            return p.playerId !== leftPlayerId;
+          }
+          if (leftConnectionId) {
+            return p.connectionId !== leftConnectionId;
+          }
+          return true;
+        })
+      );
     });
 
     /* ---------- CONNECT ---------- */
@@ -308,7 +363,7 @@ const WaitingSessionPage: React.FC = () => {
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {players.map((p, index) => (
                 <div
-                  key={p.connectionId}
+                  key={p.playerId ?? p.connectionId}
                   className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 hover:bg-white/10 transition-all duration-300 animate-fadeIn"
                   style={{ animationDelay: `${index * 0.05}s` }}
                 >

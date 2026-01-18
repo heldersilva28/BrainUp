@@ -7,6 +7,7 @@ namespace BrainUp.API.Hubs
     {
         private static ConcurrentDictionary<string, string> _connectionToSession = new();
         private static ConcurrentDictionary<string, string> _hostSessions = new();
+        private static ConcurrentDictionary<string, string> _sessionHosts = new();
         private static ConcurrentDictionary<string, List<PlayerInfo>> _sessionPlayers = new();
 
         // --------------------------------------------
@@ -15,6 +16,7 @@ namespace BrainUp.API.Hubs
         public async Task CreateSession(string sessionId, string hostConnectionId)
         {
             _hostSessions[hostConnectionId] = sessionId;
+            _sessionHosts[sessionId] = hostConnectionId;
             _connectionToSession[Context.ConnectionId] = sessionId;
 
             _sessionPlayers.TryAdd(sessionId, new List<PlayerInfo>());
@@ -32,12 +34,16 @@ namespace BrainUp.API.Hubs
         // --------------------------------------------
         // PLAYER ENTRA COM CÓDIGO
         // --------------------------------------------
-        public async Task JoinPlayerByCode(string sessionCode, string playerName)
+        public async Task JoinPlayerByCode(string sessionCode, string playerName, string playerId)
         {
             if (_connectionToSession.ContainsKey(Context.ConnectionId))
                 return;
 
             string sessionId = sessionCode;
+            if (string.IsNullOrWhiteSpace(playerId))
+            {
+                playerId = Guid.NewGuid().ToString();
+            }
 
             // Código curto
             if (sessionCode.Length == 6)
@@ -70,21 +76,42 @@ namespace BrainUp.API.Hubs
             {
                 ConnectionId = Context.ConnectionId,
                 Name = playerName,
+                PlayerId = playerId,
                 JoinedAt = DateTime.UtcNow
             };
+
+            var isNewPlayer = false;
 
             // 🔒 LOCK na lista (List<T> não é thread-safe)
             lock (_sessionPlayers[sessionId])
             {
-                if (_sessionPlayers[sessionId]
-                    .All(p => p.ConnectionId != Context.ConnectionId))
+                var existingPlayer = _sessionPlayers[sessionId]
+                    .FirstOrDefault(p => p.PlayerId == playerId);
+
+                if (existingPlayer != null)
+                {
+                    var oldConnectionId = existingPlayer.ConnectionId;
+                    existingPlayer.ConnectionId = Context.ConnectionId;
+                    existingPlayer.Name = playerName;
+                    existingPlayer.JoinedAt = DateTime.UtcNow;
+
+                    if (!string.Equals(oldConnectionId, Context.ConnectionId, StringComparison.Ordinal))
+                    {
+                        _connectionToSession.TryRemove(oldConnectionId, out _);
+                    }
+                }
+                else
                 {
                     _sessionPlayers[sessionId].Add(player);
+                    isNewPlayer = true;
                 }
             }
 
             // Enviar para OUTROS no grupo (excluindo o caller = o próprio player)
-            await Clients.OthersInGroup(sessionId).SendAsync("playerjoined", player);
+            if (isNewPlayer)
+            {
+                await Clients.OthersInGroup(sessionId).SendAsync("playerjoined", player);
+            }
             
             // Confirmar ao player que entrou com sucesso
             await Clients.Caller.SendAsync("JoinedSuccessfully", sessionId);
@@ -95,12 +122,12 @@ namespace BrainUp.API.Hubs
         // --------------------------------------------
         public async Task StartSession(string sessionId)
         {
-            await Clients.Group(sessionId).SendAsync("sessionstarted");
+            await Clients.OthersInGroup(sessionId).SendAsync("sessionstarted");
         }
 
         public async Task StartRound(string sessionId, int roundNumber, object questionData)
         {
-            await Clients.Group(sessionId).SendAsync("roundstarted", new
+            await Clients.OthersInGroup(sessionId).SendAsync("roundstarted", new
             {
                 RoundNumber = roundNumber,
                 Question = questionData
@@ -109,16 +136,22 @@ namespace BrainUp.API.Hubs
 
         public async Task EndRound(string sessionId)
         {
-            await Clients.Group(sessionId).SendAsync("roundended");
+            await Clients.OthersInGroup(sessionId).SendAsync("roundended");
         }
 
         public async Task EndSession(string sessionId)
         {
-            await Clients.Group(sessionId).SendAsync("sessionended");
+            await Clients.OthersInGroup(sessionId).SendAsync("sessionended");
         }
 
         public async Task PlayerAnswered(string sessionId, string playerId)
         {
+            if (_sessionHosts.TryGetValue(sessionId, out var hostConnectionId))
+            {
+                await Clients.Client(hostConnectionId).SendAsync("playeranswered", playerId);
+                return;
+            }
+
             await Clients.Group(sessionId).SendAsync("playeranswered", playerId);
         }
 
@@ -131,6 +164,11 @@ namespace BrainUp.API.Hubs
 
             if (_connectionToSession.TryRemove(connectionId, out var sessionId))
             {
+                if (_hostSessions.TryRemove(connectionId, out var hostSessionId))
+                {
+                    _sessionHosts.TryRemove(hostSessionId, out _);
+                }
+
                 if (_sessionPlayers.TryGetValue(sessionId, out var players))
                 {
                     PlayerInfo? removed = null;
@@ -155,6 +193,7 @@ namespace BrainUp.API.Hubs
     {
         public required string ConnectionId { get; set; }
         public required string Name { get; set; }
+        public required string PlayerId { get; set; }
         public DateTime JoinedAt { get; set; }
     }
 }
