@@ -27,6 +27,7 @@ const HostSessionPage: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [answeredPlayers, setAnsweredPlayers] = useState<string[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
+  const [playerIds, setPlayerIds] = useState<string[]>([]); // novo
   const [hasStartedFirstRound, setHasStartedFirstRound] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
@@ -74,14 +75,36 @@ const HostSessionPage: React.FC = () => {
       });
     });
 
+    newConnection.on('SessionCreated', (_sessionId: string, existingPlayers: any[]) => {
+      const existingIds = (existingPlayers ?? [])
+        .map(p => p?.connectionId ?? p?.ConnectionId)
+        .filter(Boolean);
+      const uniqueIds = Array.from(new Set(existingIds));
+      setPlayerIds(uniqueIds);
+      setTotalPlayers(uniqueIds.length);
+    });
+
     newConnection.on('playerjoined', (player: any) => {
       console.log('👤 Player joined (host view):', player);
-      setTotalPlayers(prev => prev + 1);
+      const id = player?.connectionId ?? player?.ConnectionId;
+      if (!id) return;
+      setPlayerIds(prev => {
+        if (prev.includes(id)) return prev;
+        const next = [...prev, id];
+        setTotalPlayers(next.length);
+        return next;
+      });
     });
 
     newConnection.on('PlayerLeft', (player: any) => {
       console.log('👋 Player left (host view):', player);
-      setTotalPlayers(prev => Math.max(0, prev - 1));
+      const id = player?.connectionId ?? player?.ConnectionId;
+      if (!id) return;
+      setPlayerIds(prev => {
+        const next = prev.filter(existing => existing !== id);
+        setTotalPlayers(next.length);
+        return next;
+      });
     });
 
     await newConnection.start();
@@ -324,7 +347,6 @@ const HostSessionPage: React.FC = () => {
             <div className="mt-8 flex justify-between items-center">
               <div className="text-white/70">
                 <p className="text-sm">
-                  {answeredPlayers.length} de {totalPlayers} jogadores responderam
                 </p>
               </div>
               
