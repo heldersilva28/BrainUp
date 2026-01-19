@@ -940,7 +940,7 @@ const DashboardPage: FC = () => {
                       </p>
                       <input
                       type="number"
-                      placeholder="Duração em minutos"
+                      placeholder="Duração em segundos por pergunta"
                       className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
                       />
                     </div>

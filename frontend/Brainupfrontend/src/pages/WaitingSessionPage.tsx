@@ -278,7 +278,7 @@ const WaitingSessionPage: React.FC = () => {
           text: opt.optionText
         })),
         timeLimit: 30, // Pode ser configurável
-        points: 10 // Pode ser configurável
+        points: 1000 // Pode ser configurável
       }))
     };
 
