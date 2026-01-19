@@ -1,4 +1,4 @@
-using BrainUp.API.DTOs.GameSessions;
+﻿using BrainUp.API.DTOs.GameSessions;
 using BrainUp.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -42,18 +42,33 @@ namespace BrainUp.API.Controllers
         // -------------------------------------------------------
         // JOIN SESSION
         // -------------------------------------------------------
+        // -------------------------------------------------------
+        // JOIN SESSION
+        // -------------------------------------------------------
         [HttpPost("{sessionId}/join")]
-        [AllowAnonymous] // qualquer jogador pode entrar só com nome
+        [AllowAnonymous] // qualquer jogador pode entrar so com nome
         public async Task<IActionResult> JoinSession(Guid sessionId, [FromBody] JoinSessionDto dto)
         {
-            var ok = await _service.JoinSession(sessionId, dto);
+            var playerId = await _service.JoinSession(sessionId, dto);
 
-            return ok
-                ? Ok("Jogador entrou na sessão.")
-                : BadRequest("Sessão não encontrada ou já terminou.");
+            return playerId == null
+                ? BadRequest("Sessão não encontrada ou já terminou.")
+                : Ok(new { playerId });
         }
 
         // -------------------------------------------------------
+        // JOIN SESSION BY CODE
+        // -------------------------------------------------------
+        [HttpPost("join-by-code/{sessionCode}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> JoinSessionByCode(string sessionCode, [FromBody] JoinSessionDto dto)
+        {
+            var result = await _service.JoinSessionByCode(sessionCode, dto);
+
+            return result == null
+                ? BadRequest("Sessão não encontrada ou já terminou.")
+                : Ok(result);
+        }
         // START ROUND (Host only)
         // -------------------------------------------------------
         [HttpPost("{sessionId}/round/start")]
@@ -85,6 +100,21 @@ namespace BrainUp.API.Controllers
             return ok
                 ? Ok("Resposta registada.")
                 : BadRequest("Falha ao registar resposta.");
+        }
+
+        // -------------------------------------------------------
+        // SUBMIT ANSWER WITH SCORE
+        // -------------------------------------------------------
+        [HttpPost("{sessionId}/round/{roundId}/answer-with-score/{playerId}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SubmitAnswerWithScore(Guid sessionId, Guid roundId, Guid playerId,
+            [FromBody] SubmitAnswerWithScoreDto dto)
+        {
+            var points = await _service.SubmitAnswerWithScore(sessionId, roundId, playerId, dto);
+
+            return points == null
+                ? BadRequest("Falha ao registar resposta.")
+                : Ok(new { points });
         }
 
         // -------------------------------------------------------

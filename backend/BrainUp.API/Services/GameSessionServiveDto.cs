@@ -41,17 +41,39 @@ namespace BrainUp.API.Services
         // -------------------------------------------------------
         // JOIN SESSION
         // -------------------------------------------------------
-        public async Task<bool> JoinSession(Guid sessionId, JoinSessionDto dto)
+        public async Task<Guid?> JoinSession(Guid sessionId, JoinSessionDto dto)
         {
             var session = await _context.GameSessions
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.IsActive == true);
 
-            if (session == null) return false;
+            if (session == null) return null;
 
+            return await CreateSessionPlayer(sessionId, dto.PlayerName);
+        }
+
+        public async Task<JoinSessionResultDto?> JoinSessionByCode(string sessionCode, JoinSessionDto dto)
+        {
+            var sessionId = await ResolveSessionId(sessionCode);
+            if (sessionId == null)
+                return null;
+
+            var playerId = await CreateSessionPlayer(sessionId.Value, dto.PlayerName);
+            if (playerId == null)
+                return null;
+
+            return new JoinSessionResultDto
+            {
+                SessionId = sessionId.Value,
+                PlayerId = playerId.Value
+            };
+        }
+
+        private async Task<Guid?> CreateSessionPlayer(Guid sessionId, string playerName)
+        {
             var player = new SessionPlayer
             {
                 Id = Guid.NewGuid(),
-                PlayerName = dto.PlayerName,
+                PlayerName = playerName,
                 SessionId = sessionId
             };
 
@@ -66,13 +88,36 @@ namespace BrainUp.API.Services
             });
 
             await _context.SaveChangesAsync();
-            return true;
+            return player.Id;
+        }
+
+        private async Task<Guid?> ResolveSessionId(string sessionCode)
+        {
+            if (string.IsNullOrWhiteSpace(sessionCode))
+                return null;
+
+            if (Guid.TryParse(sessionCode, out var parsed))
+                return parsed;
+
+            var normalized = sessionCode.Replace("-", "").Trim();
+            if (normalized.Length != 6)
+                return null;
+
+            var sessionIds = await _context.GameSessions
+                .Where(s => s.IsActive == true)
+                .Select(s => s.Id)
+                .ToListAsync();
+
+            var match = sessionIds.FirstOrDefault(id =>
+                id.ToString("N").StartsWith(normalized, StringComparison.OrdinalIgnoreCase));
+
+            return match == Guid.Empty ? null : match;
         }
 
         // -------------------------------------------------------
         // START ROUND
         // -------------------------------------------------------
-        public async Task<GameRound?> StartRound(Guid sessionId, OpenRoundDto dto)
+        public async Task<StartRoundResultDto?> StartRound(Guid sessionId, OpenRoundDto dto)
         {
             var session = await _context.GameSessions
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.IsActive == true);
@@ -90,7 +135,12 @@ namespace BrainUp.API.Services
 
             _context.GameRounds.Add(round);
             await _context.SaveChangesAsync();
-            return round;
+            return new StartRoundResultDto
+            {
+                RoundId = round.Id,
+                RoundNumber = round.RoundNumber,
+                QuestionId = round.QuestionId ?? dto.QuestionId
+            };
         }
 
         // -------------------------------------------------------
@@ -140,6 +190,124 @@ namespace BrainUp.API.Services
 
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<int?> SubmitAnswerWithScore(Guid sessionId, Guid roundId, Guid playerId, SubmitAnswerWithScoreDto dto)
+        {
+            var round = await _context.GameRounds
+                .Include(r => r.Session)
+                .Include(r => r.Question)
+                .ThenInclude(q => q!.QuestionOptions)
+                .FirstOrDefaultAsync(r => r.Id == roundId);
+
+            if (round == null) return null;
+            if (round.SessionId == null || round.SessionId.Value != sessionId) return null;
+
+            bool belongsToSession = await _context.SessionPlayers
+                .AnyAsync(p => p.Id == playerId && p.SessionId == round.SessionId);
+
+            if (!belongsToSession) return null;
+
+            var alreadyAnswered = await _context.PlayerAnswers
+                .AnyAsync(a => a.RoundId == roundId && a.PlayerId == playerId);
+
+            if (alreadyAnswered) return 0;
+
+            var questionOptions = round.Question?.QuestionOptions?.ToList()
+                ?? new List<QuestionOption>();
+
+            bool isCorrect = false;
+            Guid? selectedOptionId = null;
+
+            if (dto.OrderedOptionIds != null && dto.OrderedOptionIds.Count > 0)
+            {
+                var validOptionIds = new HashSet<Guid>(questionOptions.Select(o => o.Id));
+                if (dto.OrderedOptionIds.Any(id => !validOptionIds.Contains(id)))
+                    return null;
+
+                if (dto.OrderedOptionIds.Count != dto.OrderedOptionIds.Distinct().Count())
+                    return null;
+
+                if (dto.OrderedOptionIds.Count != questionOptions.Count)
+                    return null;
+
+                var expectedOrder = questionOptions
+                    .Where(o => o.CorrectOrder != null)
+                    .OrderBy(o => o.CorrectOrder)
+                    .Select(o => o.Id)
+                    .ToList();
+
+                if (expectedOrder.Count == dto.OrderedOptionIds.Count && expectedOrder.Count > 0)
+                {
+                    isCorrect = expectedOrder.SequenceEqual(dto.OrderedOptionIds);
+                }
+            }
+            else if (dto.OptionId != null)
+            {
+                var option = questionOptions.FirstOrDefault(o => o.Id == dto.OptionId.Value);
+                if (option != null)
+                {
+                    selectedOptionId = option.Id;
+                    isCorrect = option.IsCorrect ?? false;
+                }
+            }
+
+            _context.PlayerAnswers.Add(new PlayerAnswer
+            {
+                Id = Guid.NewGuid(),
+                RoundId = roundId,
+                PlayerId = playerId,
+                OptionId = selectedOptionId,
+                IsCorrect = isCorrect,
+                AnsweredAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
+            });
+
+            var points = CalculateScore(
+                isCorrect,
+                dto.BasePoints,
+                dto.TimeRemaining,
+                dto.TimeTotal);
+
+            if (points > 0)
+            {
+                var score = await _context.PlayerScores
+                    .FirstOrDefaultAsync(s =>
+                        s.PlayerId == playerId &&
+                        s.SessionId == round.SessionId);
+
+                if (score == null)
+                {
+                    score = new PlayerScore
+                    {
+                        Id = Guid.NewGuid(),
+                        PlayerId = playerId,
+                        SessionId = round.SessionId!.Value,
+                        TotalScore = 0
+                    };
+                    _context.PlayerScores.Add(score);
+                }
+
+                score.TotalScore += points;
+            }
+
+            await _context.SaveChangesAsync();
+            return points;
+        }
+
+        private static int CalculateScore(bool isCorrect, int basePoints, int timeRemaining, int timeTotal)
+        {
+            if (!isCorrect)
+                return 0;
+
+            if (timeTotal <= 0)
+                return basePoints;
+
+            var clampedRemaining = Math.Clamp(timeRemaining, 0, timeTotal);
+            var bonus = Math.Round(
+                (double)clampedRemaining / timeTotal * (basePoints / 2.0),
+                MidpointRounding.AwayFromZero);
+
+            return basePoints + (int)bonus;
         }
 
         // -------------------------------------------------------

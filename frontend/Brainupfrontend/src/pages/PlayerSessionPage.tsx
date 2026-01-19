@@ -1,19 +1,27 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as signalR from '@microsoft/signalr';
 import ConfirmModal from '../components/ConfirmModal';
+
+interface QuestionOption {
+  id: string;
+  text: string;
+}
 
 interface Question {
   id: string;
   title: string;
   type: 'MultipleChoice' | 'TrueFalse' | 'Ordering';
-  options?: string[];
+  options?: QuestionOption[];
   timeLimit: number;
+  points?: number;
+  roundId?: string;
 }
 
 const PlayerSessionPage: React.FC = () => {
   const { sessionCode } = useParams<{ sessionCode: string }>();
   const navigate = useNavigate();
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5027';
 
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [sessionStatus, setSessionStatus] =
@@ -25,10 +33,12 @@ const PlayerSessionPage: React.FC = () => {
   const [roundNumber, setRoundNumber] = useState(0);
   const [playerData, setPlayerData] = useState<any>(null);
   const [confirmedSessionId, setConfirmedSessionId] = useState<string | null>(null); //tirar
+  const [currentRoundId, setCurrentRoundId] = useState<string | null>(null);
+  const [lastPoints, setLastPoints] = useState<number | null>(null);
   const hasConnectedRef = React.useRef(false);
   
   // Para drag and drop em perguntas de ordenação
-  const [orderingItems, setOrderingItems] = useState<string[]>([]);
+  const [orderingItems, setOrderingItems] = useState<QuestionOption[]>([]);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const dragIndexRef = React.useRef<number | null>(null);
 
@@ -115,15 +125,8 @@ const PlayerSessionPage: React.FC = () => {
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
+      setSelectedAnswer(next.map(item => item.id));
       return next;
-    });
-    
-    // Atualizar resposta selecionada com nova ordem
-    setSelectedAnswer((prev: string[] | null) => {
-      const newOrder = [...orderingItems];
-      const [moved] = newOrder.splice(fromIndex, 1);
-      newOrder.splice(toIndex, 0, moved);
-      return newOrder;
     });
   };
 
@@ -151,8 +154,6 @@ const PlayerSessionPage: React.FC = () => {
   ====================================================== */
 
   const connectToHub = async (data: any) => {
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5027';
-
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(`${apiBaseUrl}/gameHub`)
       .configureLogging(signalR.LogLevel.Information)
@@ -188,29 +189,46 @@ const PlayerSessionPage: React.FC = () => {
       console.log('📝 Round number:', roundData.roundNumber || roundData.RoundNumber);
       
       // Normalizar dados (pode vir com PascalCase ou camelCase)
-      const question = roundData.question || roundData.Question;
+      const rawQuestion = roundData.question || roundData.Question;
       const round = roundData.roundNumber || roundData.RoundNumber || 1;
-      
-      if (!question) {
-        console.error('❌ No question data in roundstarted event!');
+      const roundId = rawQuestion?.roundId || roundData.roundId || roundData.RoundId || null;
+
+      if (!rawQuestion) {
+        console.error('? No question data in roundstarted event!');
         return;
       }
-      
-      console.log('✅ Setting question:', question);
-      setCurrentQuestion(question);
+
+      const rawOptions = Array.isArray(rawQuestion.options)
+        ? (rawQuestion.options as Array<QuestionOption | string>)
+        : [];
+
+      const normalizedOptions = rawOptions.map((option: QuestionOption | string) => (
+        typeof option === 'string'
+          ? { id: option, text: option }
+          : { id: option.id, text: option.text }
+      ));
+
+      const normalizedQuestion: Question = {
+        ...rawQuestion,
+        options: normalizedOptions,
+        roundId,
+      };
+
+      console.log('? Setting question:', normalizedQuestion);
+      setCurrentQuestion(normalizedQuestion);
       setRoundNumber(round);
-      setTimeLeft(question.timeLimit ?? 30);
+      setCurrentRoundId(roundId);
+      setTimeLeft(rawQuestion.timeLimit ?? 30);
       setHasAnswered(false);
       setSelectedAnswer(null);
-      
-      // Se for pergunta de ordenação, inicializar array
-      if (question.type === 'Ordering' && question.options) {
-        setOrderingItems([...question.options]);
-        setSelectedAnswer([...question.options]); // Ordem inicial
+
+      // Se for pergunta de ordenacao, inicializar array
+      if (rawQuestion.type === 'Ordering' && normalizedOptions.length > 0) {
+        setOrderingItems(normalizedOptions);
+        setSelectedAnswer(normalizedOptions.map(option => option.id));
       } else {
         setOrderingItems([]);
       }
-      
       setSessionStatus('question');
       
       console.log('✅ Session status changed to: question');
@@ -222,12 +240,14 @@ const PlayerSessionPage: React.FC = () => {
       setCurrentQuestion(null);
       setSelectedAnswer(null);
       setHasAnswered(false);
+      setCurrentRoundId(null);
     });
 
     newConnection.on('sessionended', () => {
       console.log('🏁 Session ended');
       setSessionStatus('finished');
       setCurrentQuestion(null);
+      setCurrentRoundId(null);
     });
 
     newConnection.on('HostDisconnected', () => {
@@ -290,8 +310,34 @@ const PlayerSessionPage: React.FC = () => {
     setHasAnswered(true);
 
     const targetSessionId =
-      confirmedSessionId || sessionCode || playerData?.sessionId;
-    if (!targetSessionId) return;
+      playerData?.sessionId || confirmedSessionId || sessionCode;
+    if (!targetSessionId || !currentRoundId || !playerData?.playerId || !currentQuestion) return;
+
+    const isOrderingAnswer = Array.isArray(selectedAnswer);
+    const payload = {
+      optionId: isOrderingAnswer ? null : selectedAnswer,
+      orderedOptionIds: isOrderingAnswer ? selectedAnswer : null,
+      timeRemaining: timeLeft,
+      timeTotal: currentQuestion.timeLimit ?? 30,
+      basePoints: currentQuestion.points ?? 0,
+    };
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/GameSession/${targetSessionId}/round/${currentRoundId}/answer-with-score/${playerData.playerId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setLastPoints(typeof data?.points === 'number' ? data.points : 0);
+      }
+    } catch (error) {
+      console.error('Erro ao enviar resposta:', error);
+    }
 
     await connection.invoke(
       'PlayerAnswered',
@@ -307,16 +353,18 @@ const PlayerSessionPage: React.FC = () => {
   const renderQuestion = () => {
     if (!currentQuestion) return null;
 
+    const options = currentQuestion.options ?? [];
+
     if (currentQuestion.type === 'MultipleChoice') {
       return (
         <div className="space-y-3">
-          {currentQuestion.options?.map((option, i) => (
+          {options.map((option, i) => (
             <button
-              key={i}
+              key={option.id}
               disabled={hasAnswered}
-              onClick={() => setSelectedAnswer(option)}
+              onClick={() => setSelectedAnswer(option.id)}
               className={`w-full p-5 rounded-2xl border-2 font-semibold text-lg transition-all duration-300 transform hover:scale-[1.02] ${
-                selectedAnswer === option
+                selectedAnswer === option.id
                   ? 'border-yellow-400 bg-yellow-400/30 shadow-lg shadow-yellow-400/50'
                   : 'border-white/30 bg-white/10 hover:border-white/50 hover:bg-white/15'
               } ${hasAnswered ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -324,7 +372,7 @@ const PlayerSessionPage: React.FC = () => {
               <span className="inline-block w-8 h-8 rounded-full bg-white/20 mr-3 text-center leading-8">
                 {String.fromCharCode(65 + i)}
               </span>
-              {option}
+              {option.text}
             </button>
           ))}
         </div>
@@ -332,21 +380,28 @@ const PlayerSessionPage: React.FC = () => {
     }
 
     if (currentQuestion.type === 'TrueFalse') {
+      const trueFalseOptions = options.length === 2
+        ? options
+        : [
+          { id: 'true', text: 'Verdadeiro' },
+          { id: 'false', text: 'Falso' }
+        ];
+
       return (
         <div className="grid grid-cols-2 gap-4">
-          {['Verdadeiro', 'Falso'].map(option => (
+          {trueFalseOptions.map(option => (
             <button
-              key={option}
+              key={option.id}
               disabled={hasAnswered}
-              onClick={() => setSelectedAnswer(option)}
+              onClick={() => setSelectedAnswer(option.id)}
               className={`p-8 rounded-2xl border-2 font-bold text-xl transition-all duration-300 transform hover:scale-105 ${
-                selectedAnswer === option
+                selectedAnswer === option.id
                   ? 'border-yellow-400 bg-yellow-400/30 shadow-lg shadow-yellow-400/50'
                   : 'border-white/30 bg-white/10 hover:border-white/50 hover:bg-white/15'
               } ${hasAnswered ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {option === 'Verdadeiro' ? '✓' : '✗'}
-              <div className="text-sm mt-2">{option}</div>
+              {option.text.trim().charAt(0).toUpperCase()}
+              <div className="text-sm mt-2">{option.text}</div>
             </button>
           ))}
         </div>
@@ -358,14 +413,14 @@ const PlayerSessionPage: React.FC = () => {
         <div className="space-y-4">
           <div className="rounded-xl bg-white/10 px-5 py-4 text-sm border border-white/20">
             <p className="text-center text-white/90 font-semibold">
-              🔄 Arrasta para ordenar (1 = primeiro, {orderingItems.length} = último)
+              ?? Arrasta para ordenar (1 = primeiro, {orderingItems.length} = ultimo)
             </p>
           </div>
 
           <div className="space-y-3">
             {orderingItems.map((item, index) => (
               <div
-                key={`${item}-${index}`}
+                key={item.id}
                 data-order-index={index}
                 className={`flex items-center justify-between rounded-xl border-2 px-5 py-4 text-white transition-all duration-300 touch-none ${
                   draggingIndex === index
@@ -380,7 +435,7 @@ const PlayerSessionPage: React.FC = () => {
                   dragIndexRef.current = index;
                   setDraggingIndex(index);
                   event.dataTransfer.effectAllowed = "move";
-                  const preview = buildDragPreview(item);
+                  const preview = buildDragPreview(item.text);
                   event.dataTransfer.setDragImage(preview, 20, 20);
                   requestAnimationFrame(() => preview.remove());
                 }}
@@ -401,8 +456,7 @@ const PlayerSessionPage: React.FC = () => {
                   dragIndexRef.current = null;
                   setDraggingIndex(null);
                 }}
-                // Touch events para mobile
-                onTouchStart={() => {
+                onTouchStart={(event) => {
                   if (hasAnswered) return;
                   dragIndexRef.current = index;
                   setDraggingIndex(index);
@@ -418,32 +472,23 @@ const PlayerSessionPage: React.FC = () => {
                   if (!droppable) return;
                   const nextIndex = Number(droppable.dataset.orderIndex ?? index);
                   const fromIndex = dragIndexRef.current;
-                  if (fromIndex === null || nextIndex === fromIndex) return;
+                  if (fromIndex === null || fromIndex === nextIndex) return;
                   moveOrderingItem(fromIndex, nextIndex);
                   dragIndexRef.current = nextIndex;
+                  setDraggingIndex(nextIndex);
                 }}
                 onTouchEnd={() => {
                   dragIndexRef.current = null;
                   setDraggingIndex(null);
                 }}
               >
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-white/40 bg-white/20 text-base font-bold text-white shadow-md">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
                     {index + 1}
-                  </div>
-                  <span className="text-white/90 font-semibold text-lg">{item}</span>
-                </div>
-                
-                {!hasAnswered && (
-                  <span
-                    aria-hidden="true"
-                    className="inline-flex flex-col items-center justify-center gap-1 rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-white/60 cursor-grab active:cursor-grabbing"
-                  >
-                    <span className="h-0.5 w-5 rounded-full bg-white/50" />
-                    <span className="h-0.5 w-5 rounded-full bg-white/50" />
-                    <span className="h-0.5 w-5 rounded-full bg-white/50" />
                   </span>
-                )}
+                  <span>{item.text}</span>
+                </div>
+                <span className="text-white/60 text-sm">Arrasta</span>
               </div>
             ))}
           </div>
@@ -451,7 +496,7 @@ const PlayerSessionPage: React.FC = () => {
       );
     }
 
-    return <div>Tipo não suportado: {currentQuestion.type}</div>;
+    return null;
   };
 
   return (

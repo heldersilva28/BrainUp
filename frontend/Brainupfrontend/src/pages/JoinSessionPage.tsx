@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const JoinSessionPage: React.FC = () => {
@@ -20,23 +20,41 @@ const JoinSessionPage: React.FC = () => {
     setError('');
 
     try {
-      // O código inserido será tratado como sessionId
-      const sessionId = sessionCode.trim();
-      
-      const storedPlayerId = localStorage.getItem('brainup_player_id');
-      const playerId = storedPlayerId ?? crypto.randomUUID();
-      if (!storedPlayerId) {
-        localStorage.setItem('brainup_player_id', playerId);
+      const normalizedCode = sessionCode.trim().toUpperCase();
+
+      const joinResponse = await fetch(
+        `${apiBaseUrl}/api/GameSession/join-by-code/${normalizedCode}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            playerName: playerName.trim()
+          })
+        }
+      );
+
+      if (!joinResponse.ok) {
+        const message = await joinResponse.text();
+        setError(message || "Erro ao entrar na sessao");
+        return;
       }
+
+      const joinData = await joinResponse.json();
+      const resolvedSessionId = joinData?.sessionId ?? normalizedCode;
+      const resolvedPlayerId = joinData?.playerId ?? crypto.randomUUID();
+
+      localStorage.setItem('brainup_player_id', resolvedPlayerId);
 
       // Guardar dados do jogador
       localStorage.setItem('brainup_player', JSON.stringify({
         playerName: playerName.trim(),
-        sessionId: sessionId,
-        playerId: playerId
+        sessionId: resolvedSessionId,
+        playerId: resolvedPlayerId
       }));
-      
-      navigate(`/player-session/${sessionId}`);
+
+      navigate(`/player-session/${normalizedCode}`);
     } catch (err: any) {
       setError(err.message || "Erro ao entrar na sessão");
     } finally {

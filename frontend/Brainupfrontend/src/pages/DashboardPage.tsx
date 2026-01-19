@@ -1,8 +1,7 @@
-import type { FC } from "react";
+﻿import type { FC } from "react";
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthGuard } from "../hooks/useAuthGuard";
-import { generateSessionCode } from '../utils/sessionUtils';
 
 interface Folder {
   id: string;
@@ -522,10 +521,24 @@ const DashboardPage: FC = () => {
     }
 
     try {
-      // Gerar sessionId localmente
-      const sessionId = generateSessionCode();
-      
-      // Navegar diretamente (sem criar na BD por agora)
+      const res = await authFetch(`${apiBaseUrl}/api/GameSession`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quizId: sessionQuiz }),
+      });
+
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || "Erro ao criar sessao.");
+      }
+
+      const session = await res.json();
+      const sessionId = session?.id;
+
+      if (!sessionId) {
+        throw new Error("Sessao invalida.");
+      }
+
       navigate(`/waiting-session/${sessionId}?quizId=${sessionQuiz}`);
     } catch (err) {
       console.error("Erro ao criar sessão:", err);

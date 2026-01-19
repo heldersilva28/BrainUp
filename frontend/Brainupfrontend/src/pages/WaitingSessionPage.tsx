@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import * as signalR from '@microsoft/signalr';
 import { guidToCode } from '../utils/sessionUtils';
@@ -273,7 +273,10 @@ const WaitingSessionPage: React.FC = () => {
         type: q.type === 'multiple_choice' ? 'MultipleChoice' 
              : q.type === 'true_false' ? 'TrueFalse' 
              : 'Ordering',
-        options: q.options.map(opt => opt.optionText),
+        options: q.options.map(opt => ({
+          id: opt.id ?? '',
+          text: opt.optionText
+        })),
         timeLimit: 30, // Pode ser configurável
         points: 10 // Pode ser configurável
       }))
@@ -283,6 +286,8 @@ const WaitingSessionPage: React.FC = () => {
     
     await connection.invoke('StartSession', sessionId);
     setSessionStatus('started');
+    await connection.stop();
+    setConnection(null);
     
     // Navegar para host session com dados completos
     navigate(`/host-session/${sessionId}`, { 
