@@ -4,8 +4,6 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
-import QuizBuilderPage from "./pages/QuizBuilderPage";
-import HomeSessionPage from "./pages/HomeSessionPage";
 import WaitingSessionPage from "./pages/WaitingSessionPage";
 import VerQuiz from "./pages/VerQuiz";
 import QuizEditorPage from "./pages/QuizEditorPage";
@@ -21,9 +19,6 @@ const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/session" element={<HomeSessionPage />} />
-        <Route path="/quiz-builder" element={<QuizBuilderPage />} />
-        <Route path="/session-waiting" element={<WaitingSessionPage />} />
         <Route path="/ver-quiz" element={<VerQuiz />} />
         <Route path="/quiz-editor/:quizId" element={<QuizEditorPage />} />
         <Route path="/waiting-session/:sessionId" element={<WaitingSessionPage />} />
