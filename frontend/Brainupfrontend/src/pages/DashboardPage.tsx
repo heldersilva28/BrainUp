@@ -1802,6 +1802,21 @@ const DashboardPage: FC = () => {
                         )}
                         </div>
                         
+                        <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                          e.stopPropagation();
+                          openVerQuizModal(quiz);
+                          }}
+                          className="rounded-md bg-green-500/20 p-2 transition hover:bg-green-500/40"
+                          title="Ver quiz"
+                        >
+                          <svg className="h-4 w-4 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </button>
+
                         <div className="relative quiz-menu">
                         <button
                           onClick={(e) => {
@@ -1824,24 +1839,9 @@ const DashboardPage: FC = () => {
                             onClick={(e) => {
                             e.stopPropagation();
                             setOpenMenuQuizId(null);
-                            openVerQuizModal(quiz);
-                            }}
-                            className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-white transition hover:bg-white/10 rounded-t-xl"
-                          >
-                            <svg className="h-4 w-4 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                            <circle cx="12" cy="12" r="3" />
-                            </svg>
-                            Ver quiz
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenMenuQuizId(null);
                             duplicateQuiz(quiz.id);
                             }}
-                            className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-white transition hover:bg-white/10"
+                            className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-white transition hover:bg-white/10 rounded-t-xl"
                           >
                             <svg className="h-4 w-4 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 002-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -1881,6 +1881,7 @@ const DashboardPage: FC = () => {
                         </div>
                         </div>
                         </div>
+                      </div>
                       ))}
                       </div>
                       )}
