@@ -512,5 +512,30 @@ namespace BrainUp.API.Services
             }).ToList();
         }
 
+        //delete all data from session
+        public async Task<bool> DeleteSessionData(Guid sessionId)
+        {
+            var session = await _context.GameSessions
+                .Include(s => s.GameRounds)
+                    .ThenInclude(r => r.PlayerAnswers)
+                .Include(s => s.SessionPlayers)
+                .Include(s => s.PlayerScores)
+                .FirstOrDefaultAsync(s => s.Id == sessionId);
+
+            if (session == null) return false;
+
+            // Remove related data
+            _context.PlayerAnswers.RemoveRange(session.GameRounds.SelectMany(r => r.PlayerAnswers));
+            _context.GameRounds.RemoveRange(session.GameRounds);
+            _context.SessionPlayers.RemoveRange(session.SessionPlayers);
+            _context.PlayerScores.RemoveRange(session.PlayerScores);
+
+            // Remove the session itself
+            _context.GameSessions.Remove(session);
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
     }
 }

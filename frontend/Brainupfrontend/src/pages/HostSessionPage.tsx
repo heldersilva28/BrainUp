@@ -92,6 +92,27 @@ const HostSessionPage: React.FC = () => {
   }, [timeLeft, isTimerActive]);
 
   /* =====================================================
+     AUTO-ADVANCE QUANDO TODOS RESPONDEM
+  ====================================================== */
+  useEffect(() => {
+    // Verificar se todos os jogadores responderam
+    if (
+      isTimerActive && 
+      totalPlayers > 0 && 
+      answeredPlayers.length === totalPlayers &&
+      answeredPlayers.length > 0
+    ) {
+      console.log('✅ All players answered! Auto-advancing...');
+      setIsTimerActive(false);
+      
+      // Pequeno delay para dar tempo de ver que todos responderam
+      setTimeout(() => {
+        nextQuestion();
+      }, 1500);
+    }
+  }, [answeredPlayers.length, totalPlayers, isTimerActive]);
+
+  /* =====================================================
      CONNECT HUB
   ====================================================== */
   useEffect(() => {
@@ -555,6 +576,9 @@ const HostSessionPage: React.FC = () => {
               </div>
               <div className="rounded-2xl bg-green-500/20 border border-green-500/50 px-4 py-2 text-sm font-semibold text-green-400">
                 {answeredPlayers.length}/{totalPlayers} responderam
+                {answeredPlayers.length === totalPlayers && totalPlayers > 0 && (
+                  <span className="ml-2 animate-pulse">✓</span>
+                )}
               </div>
             </div>
           </div>

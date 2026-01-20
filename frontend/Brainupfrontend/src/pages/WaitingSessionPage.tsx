@@ -40,6 +40,7 @@ const WaitingSessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [searchParams] = useSearchParams();
   const quizId = searchParams.get('quizId');
+  const timeLimit = parseInt(searchParams.get('timeLimit') || '30');
   const navigate = useNavigate();
   useAuthGuard();
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
@@ -278,7 +279,7 @@ const WaitingSessionPage: React.FC = () => {
           id: opt.id ?? '',
           text: opt.optionText
         })),
-        timeLimit: 30, // Pode ser configurável
+        timeLimit: timeLimit, // Usar o timeLimit da sessão
         points: 1000 // Pode ser configurável
       }))
     };

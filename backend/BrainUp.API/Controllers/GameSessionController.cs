@@ -188,5 +188,17 @@ namespace BrainUp.API.Controllers
 
             return Ok(sessions);
         }
+
+        //delete session
+        [HttpDelete("{sessionId}")]
+        public async Task<IActionResult> DeleteSession(Guid sessionId)
+        {
+
+            var ok = await _service.DeleteSessionData(sessionId);
+
+            return ok
+                ? Ok("Sessão deletada.")
+                : BadRequest("Falha ao deletar sessão.");
+        }
     }
 }

@@ -108,6 +108,7 @@ const DashboardPage: FC = () => {
   const [sessionQuiz, setSessionQuiz] = useState<string>("");
   const [sessionQuizzes, setSessionQuizzes] = useState<Quiz[]>([]);
   const [sessionQuizzesLoading, setSessionQuizzesLoading] = useState(false);
+  const [sessionTimeLimit, setSessionTimeLimit] = useState<number>(30);
 
   const [draggedQuizId, setDraggedQuizId] = useState<string | null>(null);
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null);
@@ -615,11 +616,19 @@ const DashboardPage: FC = () => {
       return;
     }
 
+    if (!sessionTimeLimit || sessionTimeLimit <= 0) {
+      alert("Define um tempo válido por pergunta (mínimo 1 segundo)");
+      return;
+    }
+
     try {
       const res = await authFetch(`${apiBaseUrl}/api/GameSession`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quizId: sessionQuiz }),
+        body: JSON.stringify({ 
+          quizId: sessionQuiz,
+          timeLimit: sessionTimeLimit 
+        }),
       });
 
       if (!res.ok) {
@@ -634,7 +643,7 @@ const DashboardPage: FC = () => {
         throw new Error("Sessao invalida.");
       }
 
-      navigate(`/waiting-session/${sessionId}?quizId=${sessionQuiz}`);
+      navigate(`/waiting-session/${sessionId}?quizId=${sessionQuiz}&timeLimit=${sessionTimeLimit}`);
     } catch (err) {
       console.error("Erro ao criar sessão:", err);
       alert("Erro ao criar sessão. Tenta novamente.");
@@ -800,7 +809,7 @@ const DashboardPage: FC = () => {
                   <ResponsiveContainer width="100%" height={250}>
                     <PieChart>
                       <Pie
-                        data={sessionStats.players.map((p, i) => ({
+                        data={sessionStats.players.map((p) => ({
                           name: p.playerName,
                           value: p.correctAnswers
                         }))}
@@ -913,7 +922,7 @@ const DashboardPage: FC = () => {
                       />
                       <Bar 
                         dataKey="precisão" 
-                        fill="#8b5cf6" 
+                        fill="#ef4444" 
                         name="Precisão (%)"
                         radius={[0, 8, 8, 0]}
                       />
@@ -1223,7 +1232,7 @@ const DashboardPage: FC = () => {
       )}
 
       <div className="flex min-h-screen w-full gap-6 px-4 py-8">
-        <aside className="w-72 h-fit shrink-0 sticky top-8 rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl flex flex-col">
+        <aside className="w-72 h-[calc(100vh-4rem)] shrink-0 sticky top-8 rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl flex flex-col">
           <div className="mb-8">
             <div className="text-xs uppercase tracking-[0.3em] text-white/60">
               BrainUp
@@ -1403,15 +1412,28 @@ const DashboardPage: FC = () => {
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-white/60">
-                      Tempo
+                      Tempo por Pergunta (segundos) *
                       </p>
                       <input
                       type="number"
-                      placeholder="Duração em segundos por pergunta"
+                      min="1"
+                      max="300"
+                      value={sessionTimeLimit}
+                      onChange={(e) => setSessionTimeLimit(parseInt(e.target.value) || 30)}
+                      placeholder="Ex: 30"
                       className="mt-2 w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                      required
                       />
+                      <p className="mt-1 text-xs text-white/60">
+                        Tempo que cada jogador tem para responder
+                      </p>
                     </div>
-                    <button type="button" onClick={createGameSession} disabled={!sessionQuiz} className="w-full sm:w-auto rounded-2xl bg-gradient-to-r from-green-400 to-blue-500 px-6 py-3 font-semibold text-white shadow-lg transition hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button 
+                      type="button" 
+                      onClick={createGameSession} 
+                      disabled={!sessionQuiz || !sessionTimeLimit || sessionTimeLimit <= 0} 
+                      className="w-full sm:w-auto rounded-2xl bg-gradient-to-r from-green-400 to-blue-500 px-6 py-3 font-semibold text-white shadow-lg transition hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       Criar Sessão de Jogo
                     </button>
                   </div>
