@@ -17,7 +17,6 @@ const RegisterPage: FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const navigate = useNavigate();
-  const [userType, setUserType] = useState("aluno");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +28,7 @@ const RegisterPage: FC = () => {
     }
 
     const normalizedEmail = email.trim();
-    const roleId = userType === "professor" ? 2 : 3;
+    const roleId = 2;
 
     try {
       setIsSubmitting(true);
@@ -198,25 +197,6 @@ const RegisterPage: FC = () => {
                   )}
                 </button>
               </div>
-            </div>
-
-            {/* Tipo de Utilizador */}
-            <div
-              className="flex flex-col opacity-0 animate-fade-in-up"
-              style={{ animationFillMode: "forwards", animationDelay: "0.9s" }}
-            >
-              <label className="text-white/80 mb-2">Tipo de Utilizador</label>
-
-              <select
-                value={userType}
-                onChange={(e) => setUserType(e.target.value)}
-                className="p-4 rounded-xl bg-white/20 text-white placeholder-white/50
-                           focus:outline-none focus:ring-2 focus:ring-purple-400
-                           focus:ring-offset-1 transition-all duration-300 hover:scale-105"
-              >
-                <option value="aluno" className="text-black">Aluno</option>
-                <option value="professor" className="text-black">Professor</option>
-              </select>
             </div>
 
           </div>

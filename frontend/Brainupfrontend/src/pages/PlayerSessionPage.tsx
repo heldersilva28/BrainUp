@@ -42,7 +42,7 @@ const PlayerSessionPage: React.FC = () => {
   const [playerData, setPlayerData] = useState<any>(null);
   const [confirmedSessionId, setConfirmedSessionId] = useState<string | null>(null);
   const [currentRoundId, setCurrentRoundId] = useState<string | null>(null);
-  const [,setLastPoints] = useState<number | null>(null);
+  const [, setLastPoints] = useState<number | null>(null);
   const [answerResult, setAnswerResult] = useState<{
     isCorrect: boolean;
     correctAnswer: any;
@@ -51,7 +51,7 @@ const PlayerSessionPage: React.FC = () => {
   const [playerLeaderboard, setPlayerLeaderboard] = useState<LeaderboardEntry | null>(null);
   const [topLeaderboard, setTopLeaderboard] = useState<LeaderboardEntry[]>([]);
   const hasConnectedRef = React.useRef(false);
-  
+
   // Para drag and drop em perguntas de ordenação
   const [orderingItems, setOrderingItems] = useState<QuestionOption[]>([]);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
@@ -110,7 +110,7 @@ const PlayerSessionPage: React.FC = () => {
 
     try {
       const state = JSON.parse(savedState);
-      
+
       // Check if state is still valid (not older than 5 minutes)
       const age = Date.now() - (state.timestamp || 0);
       if (age > 5 * 60 * 1000) {
@@ -128,7 +128,7 @@ const PlayerSessionPage: React.FC = () => {
         if (!sessionCheck.ok) {
           console.log('⚠️ Session no longer exists');
           localStorage.removeItem('brainup_player_state');
-          
+
           // Show error modal for ended session
           setModalConfig({
             isOpen: true,
@@ -136,28 +136,28 @@ const PlayerSessionPage: React.FC = () => {
             message: 'Esta sessão já foi encerrada pelo anfitrião.',
             type: 'error',
           });
-          
+
           return false;
         }
 
         // Check if session is active (API returns true/false)
         const isActive = await sessionCheck.json();
-        
+
         if (isActive === false) {
           console.log('⚠️ Session is no longer active');
           localStorage.removeItem('brainup_player_state');
           setSessionStatus('finished');
-          
+
           setModalConfig({
             isOpen: true,
             title: 'Sessão Terminada',
             message: 'Este quiz já terminou.',
             type: 'alert',
           });
-          
+
           return false;
         }
-        
+
         console.log('✅ Session is active:', isActive);
       } catch (err) {
         console.error('Error checking session:', err);
@@ -166,14 +166,14 @@ const PlayerSessionPage: React.FC = () => {
 
       // Restore state
       console.log('✅ Restoring player state after refresh:', state);
-      
+
       if (state.currentQuestion) {
         // Fetch full question details with correct answers
         try {
           const questionRes = await fetch(`${apiBaseUrl}/api/Questions/${state.currentQuestion.id}`);
           if (questionRes.ok) {
             const optionsRes = await fetch(`${apiBaseUrl}/api/Questions/${state.currentQuestion.id}/options`);
-            
+
             if (optionsRes.ok) {
               const options = await optionsRes.json();
               const enrichedOptions = (state.currentQuestion.options || []).map((opt: any) => {
@@ -186,10 +186,10 @@ const PlayerSessionPage: React.FC = () => {
               });
 
               state.currentQuestion.options = enrichedOptions;
-              
+
               // Restore ordering items if it's an ordering question
               if (state.currentQuestion.type === 'Ordering' && state.selectedAnswer && Array.isArray(state.selectedAnswer)) {
-                const orderedItems = state.selectedAnswer.map((id: string) => 
+                const orderedItems = state.selectedAnswer.map((id: string) =>
                   enrichedOptions.find((opt: any) => opt.id === id)
                 ).filter(Boolean);
                 setOrderingItems(orderedItems);
@@ -202,7 +202,7 @@ const PlayerSessionPage: React.FC = () => {
 
         setCurrentQuestion(state.currentQuestion);
       }
-      
+
       setSessionStatus(state.sessionStatus);
       setCurrentRoundId(state.currentRoundId);
       setRoundNumber(state.roundNumber);
@@ -275,7 +275,7 @@ const PlayerSessionPage: React.FC = () => {
 
     try {
       const data = JSON.parse(stored);
-      
+
       // Validação mais robusta
       if (!data || typeof data !== 'object') {
         console.log('❌ Invalid player data structure');
@@ -300,14 +300,14 @@ const PlayerSessionPage: React.FC = () => {
 
       // Garantir playerId
       const storedPlayerId = data.playerId || localStorage.getItem('brainup_player_id');
-      const playerId = storedPlayerId && typeof storedPlayerId === 'string' 
-        ? storedPlayerId 
+      const playerId = storedPlayerId && typeof storedPlayerId === 'string'
+        ? storedPlayerId
         : crypto.randomUUID();
-      
+
       if (!storedPlayerId) {
         localStorage.setItem('brainup_player_id', playerId);
       }
-      
+
       // Atualizar dados se necessário
       const normalizedData = {
         ...data,
@@ -315,20 +315,20 @@ const PlayerSessionPage: React.FC = () => {
         playerName: data.playerName.trim(),
         sessionId: data.sessionId.trim()
       };
-      
+
       if (JSON.stringify(data) !== JSON.stringify(normalizedData)) {
         localStorage.setItem('brainup_player', JSON.stringify(normalizedData));
       }
-      
-      console.log('✅ Player data loaded:', { 
-        playerName: normalizedData.playerName, 
+
+      console.log('✅ Player data loaded:', {
+        playerName: normalizedData.playerName,
         sessionId: normalizedData.sessionId,
         playerId: normalizedData.playerId
       });
-      
+
       hasConnectedRef.current = true;
       setPlayerData(normalizedData);
-      
+
       // Try to restore state before connecting
       restorePlayerState().then(restored => {
         if (restored) {
@@ -349,7 +349,7 @@ const PlayerSessionPage: React.FC = () => {
   ====================================================== */
   const moveOrderingItem = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return;
-    
+
     setOrderingItems((prev) => {
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
@@ -396,7 +396,7 @@ const PlayerSessionPage: React.FC = () => {
     // Check if session exists and is active before connecting
     try {
       const sessionCheck = await fetch(`${apiBaseUrl}/api/GameSession/${data.sessionId}`);
-      
+
       if (!sessionCheck.ok) {
         console.error('❌ Session does not exist');
         setModalConfig({
@@ -411,7 +411,7 @@ const PlayerSessionPage: React.FC = () => {
       // API returns true if active, false if finished
       const isActive = await sessionCheck.json();
       console.log('🔍 Session active status:', isActive);
-      
+
       if (isActive === false) {
         console.error('❌ Session is not active (finished)');
         setSessionStatus('finished');
@@ -423,7 +423,7 @@ const PlayerSessionPage: React.FC = () => {
         });
         return;
       }
-      
+
       console.log('✅ Session is active, proceeding to connect');
     } catch (err) {
       console.error('❌ Error checking session:', err);
@@ -462,12 +462,12 @@ const PlayerSessionPage: React.FC = () => {
         setConnectionStatus('connected');
         setIsReconnecting(false);
         setReconnectAttempts(0);
-        
+
         // Rejoin session after reconnection
         const codeToUse = sessionCode || data.sessionId;
         try {
           await newConnection.invoke('JoinPlayerByCode', codeToUse, data.playerName, data.playerId);
-          
+
           // Restore state if available
           await restorePlayerState();
         } catch (err) {
@@ -478,7 +478,7 @@ const PlayerSessionPage: React.FC = () => {
       newConnection.onclose((error) => {
         console.log('❌ Connection closed:', error);
         setConnectionStatus('disconnected');
-        
+
         // Attempt manual reconnection if not already reconnecting
         if (!isReconnecting && playerData) {
           attemptReconnection(playerData);
@@ -489,13 +489,13 @@ const PlayerSessionPage: React.FC = () => {
         console.log('✅ Joined successfully:', confirmedSessionId);
         setConfirmedSessionId(confirmedSessionId);
         setConnectionStatus('connected');
-        
+
         // Only set to waiting if we don't have a restored state
         const savedState = localStorage.getItem('brainup_player_state');
         if (!savedState) {
           setSessionStatus('waiting');
         }
-        
+
         if (isReconnect) {
           setModalConfig({
             isOpen: true,
@@ -514,10 +514,10 @@ const PlayerSessionPage: React.FC = () => {
 
       newConnection.on('roundstarted', async (roundData: any) => {
         console.log('📝 Round started:', roundData);
-        
+
         // Clear any saved state when a new round starts
         localStorage.removeItem('brainup_player_state');
-        
+
         const rawQuestion = roundData.question || roundData.Question;
         const round = roundData.roundNumber || roundData.RoundNumber || 1;
         const roundId = rawQuestion?.roundId || roundData.roundId || roundData.RoundId || null;
@@ -542,7 +542,7 @@ const PlayerSessionPage: React.FC = () => {
           const questionRes = await fetch(`${apiBaseUrl}/api/Questions/${rawQuestion.id}`);
           if (questionRes.ok) {
             const optionsRes = await fetch(`${apiBaseUrl}/api/Questions/${rawQuestion.id}/options`);
-            
+
             if (optionsRes.ok) {
               const options = await optionsRes.json();
               const enrichedOptions = normalizedOptions.map(opt => {
@@ -612,16 +612,16 @@ const PlayerSessionPage: React.FC = () => {
 
       newConnection.on('roundended', async () => {
         console.log('⏸️ Round ended - fetching final leaderboard');
-        
+
         // Clear saved state when round ends
         localStorage.removeItem('brainup_player_state');
-        
+
         // Aguardar um pouco para garantir que os dados foram processados no backend
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         // Buscar leaderboard atualizado
         await fetchRoundLeaderboard();
-        
+
         setSessionStatus('round-results');
       });
 
@@ -631,7 +631,7 @@ const PlayerSessionPage: React.FC = () => {
         setSessionStatus('finished');
         setCurrentQuestion(null);
         setCurrentRoundId(null);
-        
+
         // Show modal when session ends
         setModalConfig({
           isOpen: true,
@@ -654,21 +654,21 @@ const PlayerSessionPage: React.FC = () => {
 
       newConnection.on('JoinError', (message: string) => {
         console.error('❌ Join error:', message);
-        
+
         // Check if error is about session being finished
         const isFinishedError = message && (
           message.toLowerCase().includes('terminada') ||
           message.toLowerCase().includes('finished') ||
           message.toLowerCase().includes('encerrada')
         );
-        
+
         setModalConfig({
           isOpen: true,
           title: isFinishedError ? 'Sessão Terminada' : 'Erro ao Entrar',
           message: message || 'Código inválido ou sessão inexistente',
           type: isFinishedError ? 'alert' : 'error',
         });
-        
+
         if (isFinishedError) {
           setSessionStatus('finished');
         }
@@ -678,10 +678,10 @@ const PlayerSessionPage: React.FC = () => {
       console.log(isReconnect ? '🔄 Player reconnected to hub' : '🔌 Player connected to hub');
 
       const codeToUse = sessionCode || data.sessionId;
-      console.log('🎮 Joining session with:', { 
-        code: codeToUse, 
+      console.log('🎮 Joining session with:', {
+        code: codeToUse,
         playerName: data.playerName,
-        playerId: data.playerId 
+        playerId: data.playerId
       });
 
       await newConnection.invoke(
@@ -695,7 +695,7 @@ const PlayerSessionPage: React.FC = () => {
       setConnectionStatus('connected');
     } catch (error) {
       console.error('❌ Player connection error:', error);
-      
+
       if (!isReconnect) {
         setModalConfig({
           isOpen: true,
@@ -704,7 +704,7 @@ const PlayerSessionPage: React.FC = () => {
           type: 'error',
         });
       }
-      
+
       throw error;
     }
   };
@@ -721,7 +721,7 @@ const PlayerSessionPage: React.FC = () => {
 
     try {
       console.log('📊 Fetching leaderboard for session:', targetSessionId);
-      
+
       const res = await fetch(`${apiBaseUrl}/api/GameSession/${targetSessionId}/leaderboard`);
       if (!res.ok) {
         console.error('❌ Leaderboard fetch failed:', res.status, res.statusText);
@@ -735,9 +735,9 @@ const PlayerSessionPage: React.FC = () => {
         ? data.map((entry: any, index: number) => {
             const playerName = entry?.player ?? entry?.Player ?? entry?.playerName ?? entry?.PlayerName ?? 'Jogador';
             const score = Number(entry?.score ?? entry?.Score ?? entry?.totalScore ?? entry?.TotalScore ?? 0);
-            
+
             console.log(`  Player ${index + 1}:`, { playerName, score, raw: entry });
-            
+
             return {
               playerName,
               score,
@@ -748,21 +748,44 @@ const PlayerSessionPage: React.FC = () => {
 
       console.log('📊 Processed entries:', entries);
 
-      // Encontrar jogador atual (case-insensitive)
+      // Encontrar jogador atual (case-insensitive) em toda a lista
       const currentPlayerName = playerData.playerName.toLowerCase().trim();
-      const currentPlayer = entries.find(e => 
+      const currentPlayer = entries.find(e =>
         e.playerName.toLowerCase().trim() === currentPlayerName
       );
 
-      console.log('👤 Current player:', { 
-        searchName: currentPlayerName, 
-        found: currentPlayer 
+      console.log('👤 Current player:', {
+        searchName: currentPlayerName,
+        found: currentPlayer
       });
 
-      setPlayerLeaderboard(currentPlayer || null);
+      // Se não encontrou o jogador, criar entrada com rank baseado no tamanho da lista
+      if (!currentPlayer && playerData.playerName) {
+        const fallbackPlayer: LeaderboardEntry = {
+          playerName: playerData.playerName,
+          score: 0,
+          rank: entries.length + 1
+        };
+        setPlayerLeaderboard(fallbackPlayer);
+        console.log('⚠️ Player not found in leaderboard, using fallback:', fallbackPlayer);
+      } else {
+        setPlayerLeaderboard(currentPlayer || null);
+      }
+
+      // Top 3 continua igual
       setTopLeaderboard(entries.slice(0, 3));
     } catch (err) {
       console.error('❌ Erro ao carregar leaderboard:', err);
+
+      // Fallback em caso de erro
+      if (playerData.playerName) {
+        const fallbackPlayer: LeaderboardEntry = {
+          playerName: playerData.playerName,
+          score: 0,
+          rank: 1
+        };
+        setPlayerLeaderboard(fallbackPlayer);
+      }
     }
   };
 
@@ -781,7 +804,7 @@ const PlayerSessionPage: React.FC = () => {
     localStorage.removeItem('brainup_player_state');
 
     const targetSessionId = playerData?.sessionId || confirmedSessionId || sessionCode;
-    
+
     if (!targetSessionId) {
       console.error('❌ No session ID available');
       return;
@@ -811,11 +834,11 @@ const PlayerSessionPage: React.FC = () => {
       basePoints: currentQuestion.points ?? 0,
     };
 
-    console.log('📤 Submitting answer:', { 
-      targetSessionId, 
-      currentRoundId, 
+    console.log('📤 Submitting answer:', {
+      targetSessionId,
+      currentRoundId,
       playerId: playerData.playerId,
-      payload 
+      payload
     });
 
     try {
@@ -827,13 +850,13 @@ const PlayerSessionPage: React.FC = () => {
           body: JSON.stringify(payload),
         }
       );
-      
+
       console.log('📥 Answer response status:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('📥 Answer response data:', data);
-        
+
         const earnedPoints = typeof data?.points === 'number' ? data.points : 0;
         setLastPoints(earnedPoints);
 
@@ -846,7 +869,7 @@ const PlayerSessionPage: React.FC = () => {
             ?.filter(opt => opt.correctOrder !== undefined)
             .sort((a, b) => (a.correctOrder ?? 0) - (b.correctOrder ?? 0))
             .map(opt => opt.id);
-          
+
           isCorrect = JSON.stringify(selectedAnswer) === JSON.stringify(correctOrder);
           correctAnswer = correctOrder;
         } else {
@@ -893,14 +916,14 @@ const PlayerSessionPage: React.FC = () => {
   ====================================================== */
   const handleModalConfirm = () => {
     setModalConfig(prev => ({ ...prev, isOpen: false }));
-    
+
     // If session is finished, clean up and redirect
     if (sessionStatus === 'finished') {
       localStorage.removeItem('brainup_player');
       localStorage.removeItem('brainup_player_state');
       localStorage.removeItem('brainup_player_id');
     }
-    
+
     navigate('/join-session');
   };
 
@@ -917,7 +940,7 @@ const PlayerSessionPage: React.FC = () => {
         <div className="space-y-3 md:space-y-4">
           {options.map((option, i) => {
             const isSelected = selectedAnswer === option.id;
-            
+
             return (
               <button
                 key={option.id}
@@ -926,8 +949,8 @@ const PlayerSessionPage: React.FC = () => {
                 className={`
                   group relative w-full p-5 md:p-6 rounded-2xl border-2 font-semibold text-base md:text-lg
                   transition-all duration-300 transform
-                  ${isSelected 
-                    ? 'border-yellow-400 bg-gradient-to-r from-yellow-400/30 to-orange-400/30 shadow-xl shadow-yellow-400/30 scale-[1.02]' 
+                  ${isSelected
+                    ? 'border-yellow-400 bg-gradient-to-r from-yellow-400/30 to-orange-400/30 shadow-xl shadow-yellow-400/30 scale-[1.02]'
                     : 'border-white/30 bg-gradient-to-br from-white/10 to-white/5 hover:border-white/50 hover:from-white/15 hover:to-white/10 hover:scale-[1.02] active:scale-95'
                   }
                   ${hasAnswered ? 'cursor-default opacity-75' : 'cursor-pointer'}
@@ -939,8 +962,8 @@ const PlayerSessionPage: React.FC = () => {
                     w-10 h-10 md:w-12 md:h-12 rounded-xl
                     text-base md:text-lg font-black
                     transition-all duration-300
-                    ${isSelected 
-                      ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg' 
+                    ${isSelected
+                      ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg'
                       : 'bg-white/20 text-white/90 group-hover:bg-white/30'
                     }
                   `}>
@@ -973,7 +996,7 @@ const PlayerSessionPage: React.FC = () => {
           {trueFalseOptions.map(option => {
             const isSelected = selectedAnswer === option.id;
             const isTrue = option.text.trim().toLowerCase() === 'verdadeiro';
-            
+
             return (
               <button
                 key={option.id}
@@ -982,7 +1005,7 @@ const PlayerSessionPage: React.FC = () => {
                 className={`
                   group relative p-8 md:p-10 rounded-2xl border-2 font-bold text-lg md:text-xl
                   transition-all duration-300 transform
-                  ${isSelected 
+                  ${isSelected
                     ? isTrue
                       ? 'border-green-400 bg-gradient-to-br from-green-400/30 to-emerald-500/20 shadow-xl shadow-green-400/30 scale-105'
                       : 'border-red-400 bg-gradient-to-br from-red-400/30 to-rose-500/20 shadow-xl shadow-red-400/30 scale-105'
@@ -1166,7 +1189,7 @@ const PlayerSessionPage: React.FC = () => {
       )}
 
       <div className={`min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center text-white p-4 ${isReconnecting ? 'pt-20' : ''}`}>
-        
+
         {sessionStatus === 'waiting' && (
           <div className="text-center animate-fadeIn">
             <div className="text-7xl md:text-8xl mb-8 animate-pulse drop-shadow-2xl">🧠</div>
@@ -1199,7 +1222,7 @@ const PlayerSessionPage: React.FC = () => {
                 Quiz Terminado!
               </h1>
               <p className="text-gray-300 text-base md:text-lg mb-8">Obrigado por jogares</p>
-              
+
               <button
                 onClick={() => {
                   localStorage.removeItem('brainup_player');
@@ -1235,8 +1258,8 @@ const PlayerSessionPage: React.FC = () => {
                 <div className="text-right">
                   <div className={`
                     text-4xl md:text-5xl font-black transition-all duration-300
-                    ${timeLeft <= 5 
-                      ? 'text-red-400 animate-pulse scale-110 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]' 
+                    ${timeLeft <= 5
+                      ? 'text-red-400 animate-pulse scale-110 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]'
                       : 'text-yellow-400 drop-shadow-lg'
                     }
                   `}>
@@ -1251,8 +1274,8 @@ const PlayerSessionPage: React.FC = () => {
                   className={`
                     absolute top-0 left-0 h-full rounded-full
                     transition-all duration-1000 ease-linear
-                    ${timeLeft <= 5 
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]' 
+                    ${timeLeft <= 5
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]'
                       : 'bg-gradient-to-r from-yellow-400 to-orange-500 shadow-[0_0_10px_rgba(251,191,36,0.3)]'
                     }
                   `}
@@ -1274,7 +1297,7 @@ const PlayerSessionPage: React.FC = () => {
                 </h2>
               </div>
             </div>
-        
+
 
             {/* Options */}
             {renderQuestion()}
