@@ -65,6 +65,12 @@ const PlayerSessionPage: React.FC = () => {
     type: 'error' as 'confirm' | 'alert' | 'error' | 'success',
   });
 
+  // Reconnection states
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected');
+  const maxReconnectAttempts = 5;
+
   /* =====================================================
      TIMER
   ====================================================== */
@@ -74,6 +80,182 @@ const PlayerSessionPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [timeLeft, sessionStatus]);
+
+  /* =====================================================
+     PERSIST STATE TO LOCALSTORAGE
+  ====================================================== */
+  useEffect(() => {
+    if (sessionStatus === 'question' && currentQuestion && confirmedSessionId) {
+      const stateToSave = {
+        sessionStatus,
+        currentQuestion,
+        currentRoundId,
+        roundNumber,
+        timeLeft,
+        hasAnswered,
+        selectedAnswer,
+        confirmedSessionId,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('brainup_player_state', JSON.stringify(stateToSave));
+    }
+  }, [sessionStatus, currentQuestion, currentRoundId, roundNumber, timeLeft, hasAnswered, selectedAnswer, confirmedSessionId]);
+
+  /* =====================================================
+     RESTORE STATE AFTER REFRESH
+  ====================================================== */
+  const restorePlayerState = async () => {
+    const savedState = localStorage.getItem('brainup_player_state');
+    if (!savedState) return false;
+
+    try {
+      const state = JSON.parse(savedState);
+      
+      // Check if state is still valid (not older than 5 minutes)
+      const age = Date.now() - (state.timestamp || 0);
+      if (age > 5 * 60 * 1000) {
+        console.log('⚠️ Saved state is too old, ignoring');
+        localStorage.removeItem('brainup_player_state');
+        return false;
+      }
+
+      // Verify session is still active
+      const targetSessionId = state.confirmedSessionId || sessionCode;
+      if (!targetSessionId) return false;
+
+      try {
+        const sessionCheck = await fetch(`${apiBaseUrl}/api/GameSession/${targetSessionId}`);
+        if (!sessionCheck.ok) {
+          console.log('⚠️ Session no longer exists');
+          localStorage.removeItem('brainup_player_state');
+          
+          // Show error modal for ended session
+          setModalConfig({
+            isOpen: true,
+            title: 'Sessão Terminada',
+            message: 'Esta sessão já foi encerrada pelo anfitrião.',
+            type: 'error',
+          });
+          
+          return false;
+        }
+
+        // Check if session is active (API returns true/false)
+        const isActive = await sessionCheck.json();
+        
+        if (isActive === false) {
+          console.log('⚠️ Session is no longer active');
+          localStorage.removeItem('brainup_player_state');
+          setSessionStatus('finished');
+          
+          setModalConfig({
+            isOpen: true,
+            title: 'Sessão Terminada',
+            message: 'Este quiz já terminou.',
+            type: 'alert',
+          });
+          
+          return false;
+        }
+        
+        console.log('✅ Session is active:', isActive);
+      } catch (err) {
+        console.error('Error checking session:', err);
+        return false;
+      }
+
+      // Restore state
+      console.log('✅ Restoring player state after refresh:', state);
+      
+      if (state.currentQuestion) {
+        // Fetch full question details with correct answers
+        try {
+          const questionRes = await fetch(`${apiBaseUrl}/api/Questions/${state.currentQuestion.id}`);
+          if (questionRes.ok) {
+            const optionsRes = await fetch(`${apiBaseUrl}/api/Questions/${state.currentQuestion.id}/options`);
+            
+            if (optionsRes.ok) {
+              const options = await optionsRes.json();
+              const enrichedOptions = (state.currentQuestion.options || []).map((opt: any) => {
+                const fullOpt = options.find((o: any) => o.id === opt.id);
+                return {
+                  ...opt,
+                  isCorrect: fullOpt?.isCorrect,
+                  correctOrder: fullOpt?.correctOrder
+                };
+              });
+
+              state.currentQuestion.options = enrichedOptions;
+              
+              // Restore ordering items if it's an ordering question
+              if (state.currentQuestion.type === 'Ordering' && state.selectedAnswer && Array.isArray(state.selectedAnswer)) {
+                const orderedItems = state.selectedAnswer.map((id: string) => 
+                  enrichedOptions.find((opt: any) => opt.id === id)
+                ).filter(Boolean);
+                setOrderingItems(orderedItems);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching question details:', err);
+        }
+
+        setCurrentQuestion(state.currentQuestion);
+      }
+      
+      setSessionStatus(state.sessionStatus);
+      setCurrentRoundId(state.currentRoundId);
+      setRoundNumber(state.roundNumber);
+      setTimeLeft(state.timeLeft);
+      setHasAnswered(state.hasAnswered);
+      setSelectedAnswer(state.selectedAnswer);
+      setConfirmedSessionId(state.confirmedSessionId);
+
+      return true;
+    } catch (error) {
+      console.error('Error restoring player state:', error);
+      localStorage.removeItem('brainup_player_state');
+      return false;
+    }
+  };
+
+  /* =====================================================
+     RECONNECTION LOGIC
+  ====================================================== */
+  const attemptReconnection = async (data: any, attemptNumber: number = 1) => {
+    if (attemptNumber > maxReconnectAttempts) {
+      console.error('❌ Max reconnection attempts reached');
+      setModalConfig({
+        isOpen: true,
+        title: 'Conexão Perdida',
+        message: 'Não foi possível reconectar ao servidor. Por favor, volta a entrar na sessão.',
+        type: 'error',
+      });
+      setConnectionStatus('disconnected');
+      setIsReconnecting(false);
+      return;
+    }
+
+    console.log(`🔄 Reconnection attempt ${attemptNumber}/${maxReconnectAttempts}`);
+    setIsReconnecting(true);
+    setConnectionStatus('reconnecting');
+    setReconnectAttempts(attemptNumber);
+
+    // Wait before attempting (exponential backoff)
+    const delay = Math.min(1000 * Math.pow(2, attemptNumber - 1), 10000);
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    try {
+      await connectToHub(data, true);
+      console.log('✅ Reconnection successful');
+      setIsReconnecting(false);
+      setReconnectAttempts(0);
+      setConnectionStatus('connected');
+    } catch (error) {
+      console.error(`❌ Reconnection attempt ${attemptNumber} failed:`, error);
+      attemptReconnection(data, attemptNumber + 1);
+    }
+  };
 
   /* =====================================================
      LOAD PLAYER + CONNECT
@@ -146,7 +328,14 @@ const PlayerSessionPage: React.FC = () => {
       
       hasConnectedRef.current = true;
       setPlayerData(normalizedData);
-      connectToHub(normalizedData);
+      
+      // Try to restore state before connecting
+      restorePlayerState().then(restored => {
+        if (restored) {
+          console.log('✅ State restored, reconnecting...');
+        }
+        connectToHub(normalizedData);
+      });
     } catch (error) {
       console.error('❌ Error parsing player data:', error);
       localStorage.removeItem('brainup_player');
@@ -192,7 +381,7 @@ const PlayerSessionPage: React.FC = () => {
   /* =====================================================
      SIGNALR
   ====================================================== */
-  const connectToHub = async (data: any) => {
+  const connectToHub = async (data: any, isReconnect: boolean = false) => {
     if (!data || !data.playerName || !data.sessionId || !data.playerId) {
       console.error('❌ Invalid data passed to connectToHub');
       setModalConfig({
@@ -204,27 +393,118 @@ const PlayerSessionPage: React.FC = () => {
       return;
     }
 
+    // Check if session exists and is active before connecting
+    try {
+      const sessionCheck = await fetch(`${apiBaseUrl}/api/GameSession/${data.sessionId}`);
+      
+      if (!sessionCheck.ok) {
+        console.error('❌ Session does not exist');
+        setModalConfig({
+          isOpen: true,
+          title: 'Sessão Não Encontrada',
+          message: 'Esta sessão não existe ou já foi encerrada.',
+          type: 'error',
+        });
+        return;
+      }
+
+      // API returns true if active, false if finished
+      const isActive = await sessionCheck.json();
+      console.log('🔍 Session active status:', isActive);
+      
+      if (isActive === false) {
+        console.error('❌ Session is not active (finished)');
+        setSessionStatus('finished');
+        setModalConfig({
+          isOpen: true,
+          title: 'Sessão Terminada',
+          message: 'Este quiz já terminou. Não é possível entrar.',
+          type: 'alert',
+        });
+        return;
+      }
+      
+      console.log('✅ Session is active, proceeding to connect');
+    } catch (err) {
+      console.error('❌ Error checking session:', err);
+      setModalConfig({
+        isOpen: true,
+        title: 'Erro de Conexão',
+        message: 'Não foi possível verificar o estado da sessão.',
+        type: 'error',
+      });
+      return;
+    }
+
     try {
       const newConnection = new signalR.HubConnectionBuilder()
         .withUrl(`${apiBaseUrl}/gameHub`)
         .configureLogging(signalR.LogLevel.Information)
-        .withAutomaticReconnect()
+        .withAutomaticReconnect({
+          nextRetryDelayInMilliseconds: (retryContext) => {
+            if (retryContext.elapsedMilliseconds < 60000) {
+              return Math.min(1000 * Math.pow(2, retryContext.previousRetryCount), 10000);
+            }
+            return null;
+          }
+        })
         .build();
+
+      // Handle reconnection events
+      newConnection.onreconnecting((error) => {
+        console.log('🔄 Connection lost, attempting to reconnect...', error);
+        setConnectionStatus('reconnecting');
+        setIsReconnecting(true);
+      });
+
+      newConnection.onreconnected(async (connectionId) => {
+        console.log('✅ Reconnected successfully:', connectionId);
+        setConnectionStatus('connected');
+        setIsReconnecting(false);
+        setReconnectAttempts(0);
+        
+        // Rejoin session after reconnection
+        const codeToUse = sessionCode || data.sessionId;
+        try {
+          await newConnection.invoke('JoinPlayerByCode', codeToUse, data.playerName, data.playerId);
+          
+          // Restore state if available
+          await restorePlayerState();
+        } catch (err) {
+          console.error('❌ Failed to rejoin after reconnect:', err);
+        }
+      });
+
+      newConnection.onclose((error) => {
+        console.log('❌ Connection closed:', error);
+        setConnectionStatus('disconnected');
+        
+        // Attempt manual reconnection if not already reconnecting
+        if (!isReconnecting && playerData) {
+          attemptReconnection(playerData);
+        }
+      });
 
       newConnection.on('JoinedSuccessfully', (confirmedSessionId: string) => {
         console.log('✅ Joined successfully:', confirmedSessionId);
-        setSessionStatus('waiting');
         setConfirmedSessionId(confirmedSessionId);
-      });
-
-      newConnection.on('JoinError', (message: string) => {
-        console.error('❌ Join error:', message);
-        setModalConfig({
-          isOpen: true,
-          title: 'Erro ao Entrar',
-          message: message || 'Código inválido ou sessão inexistente',
-          type: 'error',
-        });
+        setConnectionStatus('connected');
+        
+        // Only set to waiting if we don't have a restored state
+        const savedState = localStorage.getItem('brainup_player_state');
+        if (!savedState) {
+          setSessionStatus('waiting');
+        }
+        
+        if (isReconnect) {
+          setModalConfig({
+            isOpen: true,
+            title: 'Reconectado',
+            message: 'Reconexão bem-sucedida!',
+            type: 'success',
+          });
+          setTimeout(() => setModalConfig(prev => ({ ...prev, isOpen: false })), 2000);
+        }
       });
 
       newConnection.on('sessionstarted', () => {
@@ -234,6 +514,9 @@ const PlayerSessionPage: React.FC = () => {
 
       newConnection.on('roundstarted', async (roundData: any) => {
         console.log('📝 Round started:', roundData);
+        
+        // Clear any saved state when a new round starts
+        localStorage.removeItem('brainup_player_state');
         
         const rawQuestion = roundData.question || roundData.Question;
         const round = roundData.roundNumber || roundData.RoundNumber || 1;
@@ -331,6 +614,9 @@ const PlayerSessionPage: React.FC = () => {
       newConnection.on('roundended', async () => {
         console.log('⏸️ Round ended - fetching final leaderboard');
         
+        // Clear saved state when round ends
+        localStorage.removeItem('brainup_player_state');
+        
         // Aguardar um pouco para garantir que os dados foram processados no backend
         await new Promise(resolve => setTimeout(resolve, 500));
         
@@ -342,23 +628,55 @@ const PlayerSessionPage: React.FC = () => {
 
       newConnection.on('sessionended', () => {
         console.log('🏁 Session ended');
+        localStorage.removeItem('brainup_player_state');
         setSessionStatus('finished');
         setCurrentQuestion(null);
         setCurrentRoundId(null);
+        
+        // Show modal when session ends
+        setModalConfig({
+          isOpen: true,
+          title: 'Sessão Terminada',
+          message: 'O quiz terminou! Obrigado pela participação.',
+          type: 'success',
+        });
       });
 
       newConnection.on('HostDisconnected', () => {
+        localStorage.removeItem('brainup_player_state');
         setModalConfig({
           isOpen: true,
           title: 'Sessão Encerrada',
-          message: 'O anfitrião saiu da sessão',
+          message: 'O anfitrião saiu da sessão e o quiz foi encerrado.',
           type: 'alert',
         });
         setSessionStatus('finished');
       });
 
+      newConnection.on('JoinError', (message: string) => {
+        console.error('❌ Join error:', message);
+        
+        // Check if error is about session being finished
+        const isFinishedError = message && (
+          message.toLowerCase().includes('terminada') ||
+          message.toLowerCase().includes('finished') ||
+          message.toLowerCase().includes('encerrada')
+        );
+        
+        setModalConfig({
+          isOpen: true,
+          title: isFinishedError ? 'Sessão Terminada' : 'Erro ao Entrar',
+          message: message || 'Código inválido ou sessão inexistente',
+          type: isFinishedError ? 'alert' : 'error',
+        });
+        
+        if (isFinishedError) {
+          setSessionStatus('finished');
+        }
+      });
+
       await newConnection.start();
-      console.log('🔌 Player connected to hub');
+      console.log(isReconnect ? '🔄 Player reconnected to hub' : '🔌 Player connected to hub');
 
       const codeToUse = sessionCode || data.sessionId;
       console.log('🎮 Joining session with:', { 
@@ -375,14 +693,20 @@ const PlayerSessionPage: React.FC = () => {
       );
 
       setConnection(newConnection);
+      setConnectionStatus('connected');
     } catch (error) {
       console.error('❌ Player connection error:', error);
-      setModalConfig({
-        isOpen: true,
-        title: 'Erro de Conexão',
-        message: error instanceof Error ? error.message : 'Não foi possível conectar ao servidor',
-        type: 'error',
-      });
+      
+      if (!isReconnect) {
+        setModalConfig({
+          isOpen: true,
+          title: 'Erro de Conexão',
+          message: error instanceof Error ? error.message : 'Não foi possível conectar ao servidor',
+          type: 'error',
+        });
+      }
+      
+      throw error;
     }
   };
 
@@ -453,6 +777,9 @@ const PlayerSessionPage: React.FC = () => {
     }
 
     setHasAnswered(true);
+
+    // Clear saved state after submitting answer
+    localStorage.removeItem('brainup_player_state');
 
     const targetSessionId = playerData?.sessionId || confirmedSessionId || sessionCode;
     
@@ -567,6 +894,14 @@ const PlayerSessionPage: React.FC = () => {
   ====================================================== */
   const handleModalConfirm = () => {
     setModalConfig(prev => ({ ...prev, isOpen: false }));
+    
+    // If session is finished, clean up and redirect
+    if (sessionStatus === 'finished') {
+      localStorage.removeItem('brainup_player');
+      localStorage.removeItem('brainup_player_state');
+      localStorage.removeItem('brainup_player_id');
+    }
+    
     navigate('/join-session');
   };
 
@@ -801,7 +1136,37 @@ const PlayerSessionPage: React.FC = () => {
         onCancel={() => {}}
       />
 
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center text-white p-4">
+      {/* Reconnection Banner */}
+      {(isReconnecting || connectionStatus === 'reconnecting') && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-4 py-3 shadow-lg">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+            <span className="font-semibold">
+              A reconectar... (Tentativa {reconnectAttempts}/{maxReconnectAttempts})
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Connection Lost Banner */}
+      {connectionStatus === 'disconnected' && !isReconnecting && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-3 shadow-lg">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
+            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span className="font-semibold">Conexão perdida</span>
+            <button
+              onClick={() => playerData && attemptReconnection(playerData)}
+              className="ml-4 px-4 py-1 bg-white text-red-600 rounded-lg font-semibold hover:bg-red-50 transition"
+            >
+              Tentar Novamente
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center text-white p-4 ${isReconnecting ? 'pt-20' : ''}`}>
         
         {sessionStatus === 'waiting' && (
           <div className="text-center animate-fadeIn">
@@ -834,7 +1199,24 @@ const PlayerSessionPage: React.FC = () => {
               <h1 className="text-4xl md:text-5xl font-black mb-4 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 bg-clip-text text-transparent">
                 Quiz Terminado!
               </h1>
-              <p className="text-gray-300 text-base md:text-lg">Obrigado por jogares</p>
+              <p className="text-gray-300 text-base md:text-lg mb-8">Obrigado por jogares</p>
+              
+              <button
+                onClick={() => {
+                  localStorage.removeItem('brainup_player');
+                  localStorage.removeItem('brainup_player_state');
+                  localStorage.removeItem('brainup_player_id');
+                  navigate('/join-session');
+                }}
+                className="
+                  rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 
+                  px-8 py-3 text-lg font-bold text-white 
+                  shadow-lg hover:scale-105 active:scale-95 
+                  transition-all duration-300
+                "
+              >
+                Jogar Novamente
+              </button>
             </div>
           </div>
         )}

@@ -341,5 +341,17 @@ namespace BrainUp.API.Services
                 })
                 .ToListAsync();
         }
+        // -------------------------------------------------------
+        // GET SESSION STATUS
+        // -------------------------------------------------------
+        public async Task<bool?> GetSessionStatus(Guid sessionId)
+        {
+            var session = await _context.GameSessions
+                .FirstOrDefaultAsync(s => s.Id == sessionId);
+            
+            if (session == null) return null;
+            
+            return session.IsActive;
+        }
     }
 }

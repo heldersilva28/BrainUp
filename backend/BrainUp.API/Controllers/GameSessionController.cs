@@ -143,5 +143,16 @@ namespace BrainUp.API.Controllers
                 ? NotFound("Sessão não encontrada.")
                 : Ok(board);
         }
+
+        [HttpGet("{sessionId}")]
+        public async Task<IActionResult> GetSessionStatus(Guid sessionId)
+        {
+            var session = await _service.GetSessionStatus(sessionId);
+
+            return session == null
+                ? NotFound("Sessão não encontrada.")
+                : Ok(session);
+        }
+
     }
 }
