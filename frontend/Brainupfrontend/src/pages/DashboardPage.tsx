@@ -20,6 +20,47 @@ interface Quiz {
   questionsCount: number;
 }
 
+interface GameSession {
+  id: string;
+  quizId: string;
+  hostId: string;
+  isActive: boolean;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+interface SessionStats {
+  sessionId: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationSeconds: number;
+  totalPlayers: number;
+  totalRounds: number;
+  averageAccuracy: number;
+  players: PlayerStats[];
+  rounds: RoundStats[];
+}
+
+interface PlayerStats {
+  playerId: string;
+  playerName: string;
+  totalScore: number;
+  totalAnswers: number;
+  correctAnswers: number;
+  accuracy: number;
+  averageResponseTimeSeconds: number;
+  rank: number;
+}
+
+interface RoundStats {
+  roundId: string;
+  roundNumber: number;
+  totalAnswers: number;
+  correctAnswers: number;
+  accuracy: number;
+  averageResponseTimeSeconds: number;
+}
+
 const DashboardPage: FC = () => {
   const navigate = useNavigate();
   useAuthGuard();
@@ -29,6 +70,10 @@ const DashboardPage: FC = () => {
   const [activeProjectTab, setActiveProjectTab] = useState<
     "import" | "library" | "create"
   >("import");
+  
+  // Session tabs
+  const [activeSessionTab, setActiveSessionTab] = useState<"create" | "history">("create");
+  
   const [activeFolder, setActiveFolder] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -87,6 +132,14 @@ const DashboardPage: FC = () => {
     type: 'success' | 'error' | 'loading' | null;
   }>({ message: '', type: null });
 
+  // Session history states
+  const [sessions, setSessions] = useState<GameSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<GameSession | null>(null);
+  const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
+
   useEffect(() => {
     fetchFolders();
   }, []);
@@ -116,6 +169,12 @@ const DashboardPage: FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuQuizId]);
+
+  useEffect(() => {
+    if (activeSection === "sessions" && activeSessionTab === "history") {
+      fetchSessions();
+    }
+  }, [activeSection, activeSessionTab]);
 
   const fetchFolders = async () => {
     setFoldersLoading(true);
@@ -165,6 +224,37 @@ const DashboardPage: FC = () => {
       setSessionQuizzes([]);
     } finally {
       setSessionQuizzesLoading(false);
+    }
+  };
+
+  const fetchSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/GameSession/minesessions`);
+      if (!res.ok) throw new Error("Erro ao carregar sessões");
+      const data: GameSession[] = await res.json();
+      setSessions(data);
+    } catch (err) {
+      console.error("Erro ao carregar sessões:", err);
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const fetchSessionStats = async (sessionId: string) => {
+    setStatsLoading(true);
+    try {
+      const res = await authFetch(`${apiBaseUrl}/api/GameSession/${sessionId}/stats`);
+      if (!res.ok) throw new Error("Erro ao carregar estatísticas");
+      const data: SessionStats = await res.json();
+      setSessionStats(data);
+      setShowStatsModal(true);
+    } catch (err) {
+      console.error("Erro ao carregar estatísticas:", err);
+      alert("Erro ao carregar estatísticas. Tenta novamente.");
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -546,8 +636,200 @@ const DashboardPage: FC = () => {
     }
   };
 
+  const exportToCSV = () => {
+    if (!sessionStats) return;
+
+    // CSV Header
+    let csv = "Estatísticas da Sessão\n\n";
+    
+    // Session Info
+    csv += "Informação Geral\n";
+    csv += `ID da Sessão,${sessionStats.sessionId}\n`;
+    csv += `Início,${new Date(sessionStats.startedAt).toLocaleString('pt-PT')}\n`;
+    csv += `Fim,${sessionStats.endedAt ? new Date(sessionStats.endedAt).toLocaleString('pt-PT') : 'Em curso'}\n`;
+    csv += `Duração,${Math.round(sessionStats.durationSeconds / 60)} minutos\n`;
+    csv += `Total de Jogadores,${sessionStats.totalPlayers}\n`;
+    csv += `Total de Rondas,${sessionStats.totalRounds}\n`;
+    csv += `Precisão Média,${sessionStats.averageAccuracy.toFixed(2)}%\n\n`;
+
+    // Players Table
+    csv += "Jogadores\n";
+    csv += "Rank,Nome,Pontuação,Respostas,Corretas,Precisão (%),Tempo Médio (s)\n";
+    sessionStats.players.forEach(player => {
+      csv += `${player.rank},${player.playerName},${player.totalScore},${player.totalAnswers},${player.correctAnswers},${player.accuracy.toFixed(2)},${player.averageResponseTimeSeconds.toFixed(2)}\n`;
+    });
+
+    csv += "\nRondas\n";
+    csv += "Ronda,Respostas,Corretas,Precisão (%),Tempo Médio (s)\n";
+    sessionStats.rounds.forEach(round => {
+      csv += `${round.roundNumber},${round.totalAnswers},${round.correctAnswers},${round.accuracy.toFixed(2)},${round.averageResponseTimeSeconds.toFixed(2)}\n`;
+    });
+
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `session_${sessionStats.sessionId}_stats.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}m ${secs}s`;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
+      {/* Stats Modal */}
+      {showStatsModal && sessionStats && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-2xl font-bold">Estatísticas da Sessão</h3>
+                <p className="text-sm text-white/70 mt-1">
+                  {new Date(sessionStats.startedAt).toLocaleDateString('pt-PT')} às{' '}
+                  {new Date(sessionStats.startedAt).toLocaleTimeString('pt-PT')}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowStatsModal(false);
+                  setSessionStats(null);
+                }}
+                className="rounded-xl bg-white/20 p-2 transition hover:bg-white/30"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* General Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="rounded-2xl bg-white/10 p-4 text-center">
+                <div className="text-3xl font-black">{sessionStats.totalPlayers}</div>
+                <div className="text-sm text-white/70">Jogadores</div>
+              </div>
+              <div className="rounded-2xl bg-white/10 p-4 text-center">
+                <div className="text-3xl font-black">{sessionStats.totalRounds}</div>
+                <div className="text-sm text-white/70">Rondas</div>
+              </div>
+              <div className="rounded-2xl bg-white/10 p-4 text-center">
+                <div className="text-3xl font-black">{sessionStats.averageAccuracy.toFixed(1)}%</div>
+                <div className="text-sm text-white/70">Precisão Média</div>
+              </div>
+              <div className="rounded-2xl bg-white/10 p-4 text-center">
+                <div className="text-3xl font-black">{formatDuration(sessionStats.durationSeconds)}</div>
+                <div className="text-sm text-white/70">Duração</div>
+              </div>
+            </div>
+
+            {/* Players Table */}
+            <div className="mb-6">
+              <h4 className="text-lg font-bold mb-3">Jogadores</h4>
+              <div className="rounded-2xl bg-white/5 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-white/10">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Rank</th>
+                        <th className="px-4 py-3 text-left">Nome</th>
+                        <th className="px-4 py-3 text-right">Pontuação</th>
+                        <th className="px-4 py-3 text-right">Respostas</th>
+                        <th className="px-4 py-3 text-right">Corretas</th>
+                        <th className="px-4 py-3 text-right">Precisão</th>
+                        <th className="px-4 py-3 text-right">Tempo Médio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sessionStats.players.map((player, index) => (
+                        <tr key={player.playerId} className={index % 2 === 0 ? 'bg-white/5' : ''}>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                              player.rank === 1 ? 'bg-yellow-500 text-white' :
+                              player.rank === 2 ? 'bg-gray-400 text-white' :
+                              player.rank === 3 ? 'bg-amber-600 text-white' :
+                              'bg-white/20'
+                            }`}>
+                              {player.rank}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-semibold">{player.playerName}</td>
+                          <td className="px-4 py-3 text-right font-bold">{player.totalScore}</td>
+                          <td className="px-4 py-3 text-right">{player.totalAnswers}</td>
+                          <td className="px-4 py-3 text-right text-green-300">{player.correctAnswers}</td>
+                          <td className="px-4 py-3 text-right">{player.accuracy.toFixed(1)}%</td>
+                          <td className="px-4 py-3 text-right">{player.averageResponseTimeSeconds.toFixed(2)}s</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Rounds Table */}
+            <div className="mb-6">
+              <h4 className="text-lg font-bold mb-3">Rondas</h4>
+              <div className="rounded-2xl bg-white/5 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-white/10">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Ronda</th>
+                        <th className="px-4 py-3 text-right">Respostas</th>
+                        <th className="px-4 py-3 text-right">Corretas</th>
+                        <th className="px-4 py-3 text-right">Precisão</th>
+                        <th className="px-4 py-3 text-right">Tempo Médio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sessionStats.rounds.map((round, index) => (
+                        <tr key={round.roundId} className={index % 2 === 0 ? 'bg-white/5' : ''}>
+                          <td className="px-4 py-3 font-semibold">Ronda {round.roundNumber}</td>
+                          <td className="px-4 py-3 text-right">{round.totalAnswers}</td>
+                          <td className="px-4 py-3 text-right text-green-300">{round.correctAnswers}</td>
+                          <td className="px-4 py-3 text-right">{round.accuracy.toFixed(1)}%</td>
+                          <td className="px-4 py-3 text-right">{round.averageResponseTimeSeconds.toFixed(2)}s</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={exportToCSV}
+                className="rounded-xl bg-green-500 px-6 py-3 font-semibold text-white transition hover:bg-green-600 flex items-center gap-2"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Exportar CSV
+              </button>
+              <button
+                onClick={() => {
+                  setShowStatsModal(false);
+                  setSessionStats(null);
+                }}
+                className="rounded-xl border border-white/40 px-6 py-3 font-semibold transition hover:bg-white/10"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Folder Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -766,9 +1048,9 @@ const DashboardPage: FC = () => {
                     : "border border-white/30 hover:bg-white/10"
                 }`}
               >
-                Sessão
+                Sessões
                 <span className="mt-1 block text-xs text-white/60">
-                  Entrar e criar sessões
+                  Criar e gerir sessões
                 </span>
               </button>
               <button
@@ -793,10 +1075,28 @@ const DashboardPage: FC = () => {
             <div className="mt-3 space-y-2">
               {activeSection === "sessions" ? (
                 <>
-                  <button type="button" onClick={() => navigate("/session")} className="w-full rounded-xl bg-white/20 px-3 py-2 text-left text-sm font-semibold text-white transition hover:bg-white/30">
-                    Entrar ou Criar sessão
+                  <button
+                    type="button"
+                    onClick={() => setActiveSessionTab("create")}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                      activeSessionTab === "create"
+                        ? "bg-white/20 text-white shadow-sm"
+                        : "text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Criar sessão
                   </button>
-                 
+                  <button
+                    type="button"
+                    onClick={() => setActiveSessionTab("history")}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                      activeSessionTab === "history"
+                        ? "bg-white/20 text-white shadow-sm"
+                        : "text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Histórico
+                  </button>
                 </>
               ) : (
                 <>
@@ -855,35 +1155,7 @@ const DashboardPage: FC = () => {
         <main className="flex-1 space-y-6">
           {activeSection === "sessions" ? (
             <>
-              <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-                <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
-                  <div>
-                    <h2 className="text-xl font-bold">Entrar em sessão</h2>
-                    <p className="text-sm text-white/70">
-                      Usa o codigo fornecido pelo host
-                    </p>
-                  </div>
-
-                  <div className="mt-6 space-y-4">
-                    <input
-                      type="text"
-                      placeholder="Codigo da sessão"
-                      className="w-full rounded-2xl bg-white/20 px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                    />
-                    <button className="w-full rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105">
-                      Entrar
-                    </button>
-                  </div>
-
-                  <div className="mt-6 rounded-2xl border border-white/20 bg-white/5 p-4">
-                    <p className="text-sm font-semibold">Dica</p>
-                    <p className="mt-2 text-xs text-white/70">
-                      Tambem podes guardar o codigo para voltar a entrar mais
-                      tarde.
-                    </p>
-                  </div>
-                </div>
-
+              {activeSessionTab === "create" && (
                 <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
                   <div>
                     <h2 className="text-xl font-bold">Criar sessão</h2>
@@ -949,7 +1221,85 @@ const DashboardPage: FC = () => {
                     </button>
                   </div>
                 </div>
-              </section>
+              )}
+
+              {activeSessionTab === "history" && (
+                <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="text-xl font-bold">Histórico de Sessões</h2>
+                      <p className="text-sm text-white/70">
+                        Todas as tuas sessões de jogo
+                      </p>
+                    </div>
+                    <button
+                      onClick={fetchSessions}
+                      className="rounded-xl bg-white/20 px-4 py-2 text-sm font-semibold transition hover:bg-white/30"
+                    >
+                      Atualizar
+                    </button>
+                  </div>
+
+                  {sessionsLoading ? (
+                    <div className="text-center text-sm text-white/60 py-12">
+                      A carregar sessões...
+                    </div>
+                  ) : sessions.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="text-6xl mb-4">📊</div>
+                      <p className="text-white/70">Ainda não criaste nenhuma sessão</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {sessions.map((session) => (
+                        <div
+                          key={session.id}
+                          className="rounded-2xl border border-white/20 bg-white/5 p-5 hover:bg-white/10 transition"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
+                                  session.isActive
+                                    ? 'bg-green-500/20 text-green-300 border border-green-500/50'
+                                    : 'bg-gray-500/20 text-gray-300 border border-gray-500/50'
+                                }`}>
+                                  {session.isActive ? (
+                                    <>
+                                      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                                      Ativa
+                                    </>
+                                  ) : (
+                                    'Terminada'
+                                  )}
+                                </span>
+                                <span className="text-xs text-white/60">
+                                  {new Date(session.startedAt).toLocaleDateString('pt-PT')} às{' '}
+                                  {new Date(session.startedAt).toLocaleTimeString('pt-PT', { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit' 
+                                  })}
+                                </span>
+                              </div>
+                              <p className="text-xs text-white/50 mt-2">
+                                ID: {session.id.substring(0, 8)}...
+                              </p>
+                            </div>
+                            
+                            <button
+                              onClick={() => fetchSessionStats(session.id)}
+                              disabled={statsLoading}
+                              className="rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {statsLoading ? 'A carregar...' : 'Ver Detalhes'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <>

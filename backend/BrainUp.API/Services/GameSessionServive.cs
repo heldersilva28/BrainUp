@@ -362,10 +362,155 @@ namespace BrainUp.API.Services
         {
             var session = await _context.GameSessions
                 .FirstOrDefaultAsync(s => s.Id == sessionId);
-            
+
             if (session == null) return null;
-            
+
             return session.IsActive;
         }
+
+        // GET STATS
+        public async Task<SessionStatsDto> GetSessionStatistics(Guid sessionId)
+        {
+            var session = await _context.GameSessions
+                .Include(s => s.SessionPlayers)
+                    .ThenInclude(p => p.PlayerAnswers)
+                        .ThenInclude(a => a.Round)
+                .Include(s => s.PlayerScores)
+                .Include(s => s.GameRounds)
+                    .ThenInclude(r => r.PlayerAnswers)
+                .FirstOrDefaultAsync(s => s.Id == sessionId);
+
+            if (session == null)
+                throw new Exception("Session not found");
+
+            var allAnswers = session.GameRounds
+                .SelectMany(r => r.PlayerAnswers)
+                .Where(a => a.AnsweredAt != null && a.Round!.StartedAt != null)
+                .ToList();
+
+            // =====================
+            // Métricas globais
+            // =====================
+
+            var duration = session.StartedAt.HasValue && session.EndedAt.HasValue
+                ? (session.EndedAt.Value - session.StartedAt.Value).TotalSeconds
+                : 0;
+
+            double averageAccuracy = allAnswers.Any()
+                ? allAnswers.Count(a => a.IsCorrect == true) * 100.0 / allAnswers.Count
+                : 0;
+
+            // =====================
+            // Métricas por jogador
+            // =====================
+
+            var playersStats = session.SessionPlayers
+                .Select(player =>
+                {
+                    var answers = player.PlayerAnswers.ToList();
+
+                    var correct = answers.Count(a => a.IsCorrect == true);
+
+                    var avgTime = answers.Any()
+                        ? answers.Average(a =>
+                            (a.AnsweredAt!.Value - a.Round!.StartedAt!.Value).TotalSeconds)
+                        : 0;
+
+                    var score = session.PlayerScores
+                        .FirstOrDefault(s => s.PlayerId == player.Id)?.TotalScore ?? 0;
+
+                    return new PlayerStatsDto
+                    {
+                        PlayerId = player.Id,
+                        PlayerName = player.PlayerName,
+
+                        TotalScore = score,
+
+                        TotalAnswers = answers.Count,
+                        CorrectAnswers = correct,
+                        Accuracy = answers.Any() ? correct * 100.0 / answers.Count : 0,
+
+                        AverageResponseTimeSeconds = avgTime
+                    };
+                })
+                .OrderByDescending(p => p.TotalScore)
+                .ToList();
+
+            // Ranking
+            for (int i = 0; i < playersStats.Count; i++)
+            {
+                playersStats[i].Rank = i + 1;
+            }
+
+            // =====================
+            // Métricas por ronda
+            // =====================
+
+            var roundsStats = session.GameRounds
+                .OrderBy(r => r.RoundNumber)
+                .Select(round =>
+                {
+                    var answers = round.PlayerAnswers.ToList();
+                    var correct = answers.Count(a => a.IsCorrect == true);
+
+                    var avgTime = answers.Any()
+                        ? answers.Average(a =>
+                            (a.AnsweredAt!.Value - round.StartedAt!.Value).TotalSeconds)
+                        : 0;
+
+                    return new RoundStatsDto
+                    {
+                        RoundId = round.Id,
+                        RoundNumber = round.RoundNumber,
+
+                        TotalAnswers = answers.Count,
+                        CorrectAnswers = correct,
+                        Accuracy = answers.Any() ? correct * 100.0 / answers.Count : 0,
+
+                        AverageResponseTimeSeconds = avgTime
+                    };
+                })
+                .ToList();
+
+            // =====================
+            // Resultado final
+            // =====================
+
+            return new SessionStatsDto
+            {
+                SessionId = session.Id,
+                StartedAt = session.StartedAt,
+                EndedAt = session.EndedAt,
+                DurationSeconds = duration,
+
+                TotalPlayers = session.SessionPlayers.Count,
+                TotalRounds = session.GameRounds.Count,
+
+                AverageAccuracy = averageAccuracy,
+
+                Players = playersStats,
+                Rounds = roundsStats
+            };
+        }
+
+        // GET ALL MINE SESSIONS
+        public async Task<List<GameSessionDto>> GetAllMySessions(Guid hostId)
+        {
+            var sessions = await _context.GameSessions
+                .Where(s => s.HostId == hostId)
+                .OrderByDescending(s => s.StartedAt)
+                .ToListAsync();
+
+            return sessions.Select(s => new GameSessionDto
+            {
+                Id = s.Id,
+                QuizId = s.QuizId!.Value,
+                HostId = s.HostId!.Value,
+                IsActive = s.IsActive!.Value,
+                StartedAt = s.StartedAt!.Value,
+                EndedAt = s.EndedAt
+            }).ToList();
+        }
+
     }
 }

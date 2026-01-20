@@ -166,5 +166,27 @@ namespace BrainUp.API.Controllers
                 : Ok(session);
         }
 
+        [HttpGet("{sessionId}/stats")]
+        [Authorize]
+        public async Task<IActionResult> GetSessionStats(Guid sessionId)
+        {
+            var stats = await _service.GetSessionStatistics(sessionId);
+
+            return stats == null
+                ? NotFound("Sessão não encontrada.")
+                : Ok(stats);
+
+        }
+
+        [HttpGet("minesessions")]
+        [Authorize]
+        public async Task<IActionResult> GetMySessions()
+        {
+            var userId = GetUserId();
+
+            var sessions = await _service.GetAllMySessions(userId);
+
+            return Ok(sessions);
+        }
     }
 }

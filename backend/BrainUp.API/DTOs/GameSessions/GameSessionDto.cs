@@ -7,5 +7,6 @@ namespace BrainUp.API.DTOs.GameSessions
         public Guid HostId { get; set; }
         public bool IsActive { get; set; }
         public DateTime StartedAt { get; set; }
+        public DateTime? EndedAt { get; set; }
     }
 }
