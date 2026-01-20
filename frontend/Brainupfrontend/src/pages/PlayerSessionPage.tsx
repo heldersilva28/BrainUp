@@ -42,7 +42,7 @@ const PlayerSessionPage: React.FC = () => {
   const [playerData, setPlayerData] = useState<any>(null);
   const [confirmedSessionId, setConfirmedSessionId] = useState<string | null>(null);
   const [currentRoundId, setCurrentRoundId] = useState<string | null>(null);
-  const [lastPoints, setLastPoints] = useState<number | null>(null);
+  const [,setLastPoints] = useState<number | null>(null);
   const [answerResult, setAnswerResult] = useState<{
     isCorrect: boolean;
     correctAnswer: any;
@@ -541,7 +541,6 @@ const PlayerSessionPage: React.FC = () => {
         try {
           const questionRes = await fetch(`${apiBaseUrl}/api/Questions/${rawQuestion.id}`);
           if (questionRes.ok) {
-            const fullQuestion = await questionRes.json();
             const optionsRes = await fetch(`${apiBaseUrl}/api/Questions/${rawQuestion.id}/options`);
             
             if (optionsRes.ok) {
@@ -1067,7 +1066,7 @@ const PlayerSessionPage: React.FC = () => {
                     dragIndexRef.current = null;
                     setDraggingIndex(null);
                   }}
-                  onTouchStart={(event) => {
+                  onTouchStart={() => {
                     if (hasAnswered) return;
                     dragIndexRef.current = index;
                     setDraggingIndex(index);

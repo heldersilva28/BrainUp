@@ -42,9 +42,6 @@ namespace BrainUp.API.Controllers
         // -------------------------------------------------------
         // JOIN SESSION
         // -------------------------------------------------------
-        // -------------------------------------------------------
-        // JOIN SESSION
-        // -------------------------------------------------------
         [HttpPost("{sessionId}/join")]
         [AllowAnonymous] // qualquer jogador pode entrar so com nome
         public async Task<IActionResult> JoinSession(Guid sessionId, [FromBody] JoinSessionDto dto)
@@ -85,6 +82,21 @@ namespace BrainUp.API.Controllers
                 return BadRequest("Sessão inválida ou inativa.");
 
             return Ok(round);
+        }
+
+        // END ROUND (Host only)
+        // -------------------------------------------------------
+        [HttpPost("round/{roundId}/end")]
+        [Authorize]
+        public async Task<IActionResult> EndRound(Guid roundId)
+        {
+            var userId = GetUserId();
+
+            var ok = await _service.EndRound(roundId);
+
+            return ok
+                ? Ok("Rodada encerrada.")
+                : BadRequest("Falha ao encerrar rodada.");
         }
 
         // -------------------------------------------------------

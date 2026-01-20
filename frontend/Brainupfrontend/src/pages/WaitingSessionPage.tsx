@@ -1,8 +1,9 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import * as signalR from '@microsoft/signalr';
 import { guidToCode } from '../utils/sessionUtils';
 import { useSearchParams } from 'react-router-dom';
+import { useAuthGuard } from '../hooks/useAuthGuard';
 
 interface Player {
   connectionId: string;
@@ -40,7 +41,7 @@ const WaitingSessionPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const quizId = searchParams.get('quizId');
   const navigate = useNavigate();
-  const location = useLocation();
+  useAuthGuard();
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [sessionStatus, setSessionStatus] = useState<'waiting' | 'started'>('waiting');

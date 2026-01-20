@@ -1,6 +1,6 @@
 ﻿import type { FC } from "react";
-import { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuthGuard } from "../hooks/useAuthGuard";
 
 interface Folder {

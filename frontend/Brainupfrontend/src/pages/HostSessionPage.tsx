@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import * as signalR from '@microsoft/signalr';
+import { useAuthGuard } from '../hooks/useAuthGuard';
 
 interface Question {
   id: string;
@@ -31,6 +32,7 @@ const HostSessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  useAuthGuard();
   const quizData = location.state?.quiz as QuizData;
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5027';
 
@@ -38,7 +40,7 @@ const HostSessionPage: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [answeredPlayers, setAnsweredPlayers] = useState<string[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
-  const [playerIds, setPlayerIds] = useState<string[]>([]); // novo
+  const [, setPlayerIds] = useState<string[]>([]); // novo
   const [hasStartedFirstRound, setHasStartedFirstRound] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
@@ -61,6 +63,7 @@ const HostSessionPage: React.FC = () => {
 
   const currentQuestion = quizData?.questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === (quizData?.questions.length || 0) - 1;
+  const [currentRoundId, setCurrentRoundId] = useState<string | null>(null);
 
   useEffect(() => {
     if (showFinalResults) {
@@ -318,6 +321,8 @@ const HostSessionPage: React.FC = () => {
       return;
     }
 
+    setCurrentRoundId(roundId);
+      
     await connection.invoke('StartRound', sessionId, roundNum, {
       roundId,
       id: question.id,
@@ -336,6 +341,26 @@ const HostSessionPage: React.FC = () => {
     if (!connection || !sessionId) return;
 
     setIsTimerActive(false);
+
+    if (currentRoundId) {
+      try {
+        const res = await authFetch(
+          `${apiBaseUrl}/api/GameSession/round/${currentRoundId}/end`,
+          { method: 'POST' }
+        );
+  
+        if (!res.ok) {
+          const msg = await res.text();
+          console.error('❌ Erro ao encerrar ronda na API:', msg);
+        } else {
+          console.log('✅ Ronda encerrada com sucesso na API');
+        }
+      } catch (err) {
+        console.error('❌ Erro ao chamar EndRound API:', err);
+      }
+    } else {
+      console.warn('⚠️ currentRoundId não definido, não foi possível encerrar ronda na API');
+    }
 
     await connection.invoke('EndRound', sessionId);
 
@@ -358,17 +383,38 @@ const HostSessionPage: React.FC = () => {
       const highestScore = leaderboardEntries.length > 0
         ? Math.max(...leaderboardEntries.map(e => e.score))
         : 0;
-
+    
       setFinalStats({
         totalQuestions,
         averageScore: Math.round(averageScore),
         highestScore
       });
-
+    
+      // 🔹 1. Terminar sessão no backend (API REST)
+      try {
+        const res = await authFetch(
+          `${apiBaseUrl}/api/GameSession/${sessionId}/end`,
+          { method: 'POST' }
+        );
+    
+        if (!res.ok) {
+          const msg = await res.text();
+          console.error('❌ Erro ao terminar sessão na API:', msg);
+        } else {
+          console.log('✅ Sessão terminada com sucesso na API');
+        }
+      } catch (err) {
+        console.error('❌ Erro ao chamar endpoint EndSession:', err);
+      }
+    
+      // 🔹 2. Avisar via SignalR (opcional, se usas isto para notificar jogadores)
       await connection.invoke('EndSession', sessionId);
+    
+      // 🔹 3. Mostrar resultados finais
       setShowFinalResults(true);
       return;
     }
+    
 
     const nextIndex = currentQuestionIndex + 1;
     setCurrentQuestionIndex(nextIndex);

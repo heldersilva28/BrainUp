@@ -326,6 +326,20 @@ namespace BrainUp.API.Services
         }
 
         // -------------------------------------------------------
+        // END ROUND
+        // -------------------------------------------------------
+        public async Task<bool> EndRound(Guid roundId)
+        {
+            var round = await _context.GameRounds.FirstOrDefaultAsync(r => r.Id == roundId);
+            if (round == null) return false;
+
+            round.EndedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        // -------------------------------------------------------
         // LEADERBOARD
         // -------------------------------------------------------
         public async Task<object?> GetLeaderboard(Guid sessionId)
