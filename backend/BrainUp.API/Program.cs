@@ -112,6 +112,17 @@ builder.Services.AddScoped<FolderService>();
 
 builder.Services.AddHttpContextAccessor();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("https://brainup-o6cu.onrender.com")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+
 
 
 var app = builder.Build();
