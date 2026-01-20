@@ -135,7 +135,6 @@ namespace BrainUp.API.Controllers
         // LEADERBOARD
         // -------------------------------------------------------
         [HttpGet("{sessionId}/leaderboard")]
-        [Authorize]
         public async Task<IActionResult> GetLeaderboard(Guid sessionId)
         {
             var board = await _service.GetLeaderboard(sessionId);

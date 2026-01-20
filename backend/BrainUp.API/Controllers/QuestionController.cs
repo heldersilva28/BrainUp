@@ -50,7 +50,7 @@ namespace BrainUp.API.Controllers
         // GET BY ID
         // -------------------------------------------------------
         [HttpGet("{id}")]
-        [Authorize]
+        
         public async Task<IActionResult> Get(Guid id)
         {
             var q = await _service.GetById(id);
@@ -79,6 +79,20 @@ namespace BrainUp.API.Controllers
             var questions = await _service.GetFromQuiz(quizId, authorId);
 
             return Ok(questions);
+        }
+
+        // -------------------------------------------------------
+        // GET OPTIONS FROM QUESTION (with correct info)
+        // -------------------------------------------------------
+        [HttpGet("{questionId}/options")]
+        public async Task<IActionResult> GetQuestionOptions(Guid questionId)
+        {
+            var options = await _service.GetQuestionOptions(questionId);
+            
+            if (options == null)
+                return NotFound("Question not found.");
+
+            return Ok(options);
         }
 
         //remover opção de pergunta

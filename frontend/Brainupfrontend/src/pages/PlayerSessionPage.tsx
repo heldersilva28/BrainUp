@@ -6,6 +6,8 @@ import ConfirmModal from '../components/ConfirmModal';
 interface QuestionOption {
   id: string;
   text: string;
+  isCorrect?: boolean;
+  correctOrder?: number;
 }
 
 interface Question {
@@ -18,6 +20,12 @@ interface Question {
   roundId?: string;
 }
 
+interface LeaderboardEntry {
+  playerName: string;
+  score: number;
+  rank: number;
+}
+
 const PlayerSessionPage: React.FC = () => {
   const { sessionCode } = useParams<{ sessionCode: string }>();
   const navigate = useNavigate();
@@ -25,16 +33,23 @@ const PlayerSessionPage: React.FC = () => {
 
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [sessionStatus, setSessionStatus] =
-    useState<'waiting' | 'question' | 'waiting-next' | 'finished'>('waiting');
+    useState<'waiting' | 'question' | 'waiting-next' | 'round-results' | 'finished'>('waiting');
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<any>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [roundNumber, setRoundNumber] = useState(0);
   const [playerData, setPlayerData] = useState<any>(null);
-  const [confirmedSessionId, setConfirmedSessionId] = useState<string | null>(null); //tirar
+  const [confirmedSessionId, setConfirmedSessionId] = useState<string | null>(null);
   const [currentRoundId, setCurrentRoundId] = useState<string | null>(null);
   const [lastPoints, setLastPoints] = useState<number | null>(null);
+  const [answerResult, setAnswerResult] = useState<{
+    isCorrect: boolean;
+    correctAnswer: any;
+    earnedPoints: number;
+  } | null>(null);
+  const [playerLeaderboard, setPlayerLeaderboard] = useState<LeaderboardEntry | null>(null);
+  const [topLeaderboard, setTopLeaderboard] = useState<LeaderboardEntry[]>([]);
   const hasConnectedRef = React.useRef(false);
   
   // Para drag and drop em perguntas de ordenação
@@ -51,11 +66,19 @@ const PlayerSessionPage: React.FC = () => {
   });
 
   /* =====================================================
+     TIMER
+  ====================================================== */
+  useEffect(() => {
+    if (timeLeft > 0 && sessionStatus === 'question') {
+      const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [timeLeft, sessionStatus]);
+
+  /* =====================================================
      LOAD PLAYER + CONNECT
   ====================================================== */
-
   useEffect(() => {
-    // Prevenir múltiplas execuções (React Strict Mode)
     if (hasConnectedRef.current) {
       console.log('⚠️ Connection already initiated, skipping...');
       return;
@@ -63,6 +86,7 @@ const PlayerSessionPage: React.FC = () => {
 
     const stored = localStorage.getItem('brainup_player');
     if (!stored) {
+      console.log('❌ No player data found, redirecting...');
       navigate('/join-session');
       return;
     }
@@ -70,50 +94,66 @@ const PlayerSessionPage: React.FC = () => {
     try {
       const data = JSON.parse(stored);
       
-      // Validate required fields
-      if (!data.playerName || !data.sessionId) {
+      // Validação mais robusta
+      if (!data || typeof data !== 'object') {
+        console.log('❌ Invalid player data structure');
+        localStorage.removeItem('brainup_player');
         navigate('/join-session');
         return;
       }
 
-      const storedPlayerId =
-        data.playerId || localStorage.getItem('brainup_player_id');
-      const playerId = storedPlayerId ?? crypto.randomUUID();
+      if (!data.playerName || typeof data.playerName !== 'string') {
+        console.log('❌ Missing or invalid playerName');
+        localStorage.removeItem('brainup_player');
+        navigate('/join-session');
+        return;
+      }
+
+      if (!data.sessionId || typeof data.sessionId !== 'string') {
+        console.log('❌ Missing or invalid sessionId');
+        localStorage.removeItem('brainup_player');
+        navigate('/join-session');
+        return;
+      }
+
+      // Garantir playerId
+      const storedPlayerId = data.playerId || localStorage.getItem('brainup_player_id');
+      const playerId = storedPlayerId && typeof storedPlayerId === 'string' 
+        ? storedPlayerId 
+        : crypto.randomUUID();
+      
       if (!storedPlayerId) {
         localStorage.setItem('brainup_player_id', playerId);
       }
-      if (data.playerId !== playerId) {
-        data.playerId = playerId;
-        localStorage.setItem('brainup_player', JSON.stringify(data));
+      
+      // Atualizar dados se necessário
+      const normalizedData = {
+        ...data,
+        playerId,
+        playerName: data.playerName.trim(),
+        sessionId: data.sessionId.trim()
+      };
+      
+      if (JSON.stringify(data) !== JSON.stringify(normalizedData)) {
+        localStorage.setItem('brainup_player', JSON.stringify(normalizedData));
       }
       
-      hasConnectedRef.current = true; // 🔒 Marcar como conectado
-      setPlayerData(data);
-      connectToHub(data);
+      console.log('✅ Player data loaded:', { 
+        playerName: normalizedData.playerName, 
+        sessionId: normalizedData.sessionId,
+        playerId: normalizedData.playerId
+      });
+      
+      hasConnectedRef.current = true;
+      setPlayerData(normalizedData);
+      connectToHub(normalizedData);
     } catch (error) {
-      console.error('Invalid player data:', error);
+      console.error('❌ Error parsing player data:', error);
+      localStorage.removeItem('brainup_player');
+      localStorage.removeItem('brainup_player_id');
       navigate('/join-session');
     }
-
-    // Cleanup ao desmontar
-    return () => {
-      if (connection) {
-        console.log('🔌 Disconnecting...');
-        connection.stop();
-      }
-    };
-  }, []); // Dependências vazias - só executa uma vez
-
-  /* =====================================================
-     TIMER
-  ====================================================== */
-
-  useEffect(() => {
-    if (timeLeft > 0 && sessionStatus === 'question' && !hasAnswered) {
-      const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [timeLeft, sessionStatus, hasAnswered]);
+  }, [navigate]);
 
   /* =====================================================
      DRAG AND DROP HELPERS
@@ -152,129 +192,184 @@ const PlayerSessionPage: React.FC = () => {
   /* =====================================================
      SIGNALR
   ====================================================== */
-
   const connectToHub = async (data: any) => {
-    const newConnection = new signalR.HubConnectionBuilder()
-      .withUrl(`${apiBaseUrl}/gameHub`)
-      .configureLogging(signalR.LogLevel.Information)
-      .withAutomaticReconnect()
-      .build();
-
-    /* ---------- EVENTOS PRIMEIRO ---------- */
-
-    newConnection.on('JoinedSuccessfully', (confirmedSessionId: string) => {
-      console.log('✅ Joined successfully:', confirmedSessionId);
-      setSessionStatus('waiting');
-      setConfirmedSessionId(confirmedSessionId); //tirar
-    });
-
-    newConnection.on('JoinError', (message: string) => {
-      console.error('❌ Join error:', message);
+    if (!data || !data.playerName || !data.sessionId || !data.playerId) {
+      console.error('❌ Invalid data passed to connectToHub');
       setModalConfig({
         isOpen: true,
-        title: 'Erro ao Entrar',
-        message: message || 'Código inválido ou sessão inexistente',
+        title: 'Erro',
+        message: 'Dados de jogador inválidos',
         type: 'error',
       });
-    });
-
-    newConnection.on('sessionstarted', () => {
-      console.log('🎮 Session started - aguardando primeira pergunta');
-      setSessionStatus('waiting-next');
-    });
-
-    newConnection.on('roundstarted', (roundData: any) => {
-      console.log('📝 Round started - EVENTO RECEBIDO:', roundData);
-      console.log('📝 Question data:', roundData.question || roundData.Question);
-      console.log('📝 Round number:', roundData.roundNumber || roundData.RoundNumber);
-      
-      // Normalizar dados (pode vir com PascalCase ou camelCase)
-      const rawQuestion = roundData.question || roundData.Question;
-      const round = roundData.roundNumber || roundData.RoundNumber || 1;
-      const roundId = rawQuestion?.roundId || roundData.roundId || roundData.RoundId || null;
-
-      if (!rawQuestion) {
-        console.error('? No question data in roundstarted event!');
-        return;
-      }
-
-      const rawOptions = Array.isArray(rawQuestion.options)
-        ? (rawQuestion.options as Array<QuestionOption | string>)
-        : [];
-
-      const normalizedOptions = rawOptions.map((option: QuestionOption | string) => (
-        typeof option === 'string'
-          ? { id: option, text: option }
-          : { id: option.id, text: option.text }
-      ));
-
-      const normalizedQuestion: Question = {
-        ...rawQuestion,
-        options: normalizedOptions,
-        roundId,
-      };
-
-      console.log('? Setting question:', normalizedQuestion);
-      setCurrentQuestion(normalizedQuestion);
-      setRoundNumber(round);
-      setCurrentRoundId(roundId);
-      setTimeLeft(rawQuestion.timeLimit ?? 30);
-      setHasAnswered(false);
-      setSelectedAnswer(null);
-
-      // Se for pergunta de ordenacao, inicializar array
-      if (rawQuestion.type === 'Ordering' && normalizedOptions.length > 0) {
-        setOrderingItems(normalizedOptions);
-        setSelectedAnswer(normalizedOptions.map(option => option.id));
-      } else {
-        setOrderingItems([]);
-      }
-      setSessionStatus('question');
-      
-      console.log('✅ Session status changed to: question');
-    });
-
-    newConnection.on('roundended', () => {
-      console.log('⏸️ Round ended');
-      setSessionStatus('waiting-next');
-      setCurrentQuestion(null);
-      setSelectedAnswer(null);
-      setHasAnswered(false);
-      setCurrentRoundId(null);
-    });
-
-    newConnection.on('sessionended', () => {
-      console.log('🏁 Session ended');
-      setSessionStatus('finished');
-      setCurrentQuestion(null);
-      setCurrentRoundId(null);
-    });
-
-    newConnection.on('HostDisconnected', () => {
-      setModalConfig({
-        isOpen: true,
-        title: 'Sessão Encerrada',
-        message: 'O anfitrião saiu da sessão',
-        type: 'alert',
-      });
-      setSessionStatus('finished');
-    });
-
-    /* ---------- CONNECTAR ---------- */
+      return;
+    }
 
     try {
+      const newConnection = new signalR.HubConnectionBuilder()
+        .withUrl(`${apiBaseUrl}/gameHub`)
+        .configureLogging(signalR.LogLevel.Information)
+        .withAutomaticReconnect()
+        .build();
+
+      newConnection.on('JoinedSuccessfully', (confirmedSessionId: string) => {
+        console.log('✅ Joined successfully:', confirmedSessionId);
+        setSessionStatus('waiting');
+        setConfirmedSessionId(confirmedSessionId);
+      });
+
+      newConnection.on('JoinError', (message: string) => {
+        console.error('❌ Join error:', message);
+        setModalConfig({
+          isOpen: true,
+          title: 'Erro ao Entrar',
+          message: message || 'Código inválido ou sessão inexistente',
+          type: 'error',
+        });
+      });
+
+      newConnection.on('sessionstarted', () => {
+        console.log('🎮 Session started - aguardando primeira pergunta');
+        setSessionStatus('waiting');
+      });
+
+      newConnection.on('roundstarted', async (roundData: any) => {
+        console.log('📝 Round started:', roundData);
+        
+        const rawQuestion = roundData.question || roundData.Question;
+        const round = roundData.roundNumber || roundData.RoundNumber || 1;
+        const roundId = rawQuestion?.roundId || roundData.roundId || roundData.RoundId || null;
+
+        if (!rawQuestion) {
+          console.error('❌ No question data in roundstarted event!');
+          return;
+        }
+
+        const rawOptions = Array.isArray(rawQuestion.options)
+          ? (rawQuestion.options as Array<QuestionOption | string>)
+          : [];
+
+        const normalizedOptions = rawOptions.map((option: QuestionOption | string) => (
+          typeof option === 'string'
+            ? { id: option, text: option }
+            : { id: option.id, text: option.text }
+        ));
+
+        // Buscar informação completa da pergunta
+        try {
+          const questionRes = await fetch(`${apiBaseUrl}/api/Questions/${rawQuestion.id}`);
+          if (questionRes.ok) {
+            const fullQuestion = await questionRes.json();
+            const optionsRes = await fetch(`${apiBaseUrl}/api/Questions/${rawQuestion.id}/options`);
+            
+            if (optionsRes.ok) {
+              const options = await optionsRes.json();
+              const enrichedOptions = normalizedOptions.map(opt => {
+                const fullOpt = options.find((o: any) => o.id === opt.id);
+                return {
+                  ...opt,
+                  isCorrect: fullOpt?.isCorrect,
+                  correctOrder: fullOpt?.correctOrder
+                };
+              });
+
+              const normalizedQuestion: Question = {
+                ...rawQuestion,
+                options: enrichedOptions,
+                roundId,
+              };
+
+              setCurrentQuestion(normalizedQuestion);
+              setRoundNumber(round);
+              setCurrentRoundId(roundId);
+              setTimeLeft(rawQuestion.timeLimit ?? 30);
+              setHasAnswered(false);
+              setSelectedAnswer(null);
+              setAnswerResult(null);
+              setPlayerLeaderboard(null);
+              setTopLeaderboard([]);
+
+              if (rawQuestion.type === 'Ordering' && enrichedOptions.length > 0) {
+                setOrderingItems(enrichedOptions);
+                setSelectedAnswer(enrichedOptions.map(option => option.id));
+              } else {
+                setOrderingItems([]);
+              }
+
+              setSessionStatus('question');
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('⚠️ Error fetching question details:', err);
+        }
+
+        // Fallback
+        const normalizedQuestion: Question = {
+          ...rawQuestion,
+          options: normalizedOptions,
+          roundId,
+        };
+
+        setCurrentQuestion(normalizedQuestion);
+        setRoundNumber(round);
+        setCurrentRoundId(roundId);
+        setTimeLeft(rawQuestion.timeLimit ?? 30);
+        setHasAnswered(false);
+        setSelectedAnswer(null);
+        setAnswerResult(null);
+
+        if (rawQuestion.type === 'Ordering' && normalizedOptions.length > 0) {
+          setOrderingItems(normalizedOptions);
+          setSelectedAnswer(normalizedOptions.map(option => option.id));
+        } else {
+          setOrderingItems([]);
+        }
+
+        setSessionStatus('question');
+      });
+
+      newConnection.on('roundended', async () => {
+        console.log('⏸️ Round ended - fetching final leaderboard');
+        
+        // Aguardar um pouco para garantir que os dados foram processados no backend
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Buscar leaderboard atualizado
+        await fetchRoundLeaderboard();
+        
+        setSessionStatus('round-results');
+      });
+
+      newConnection.on('sessionended', () => {
+        console.log('🏁 Session ended');
+        setSessionStatus('finished');
+        setCurrentQuestion(null);
+        setCurrentRoundId(null);
+      });
+
+      newConnection.on('HostDisconnected', () => {
+        setModalConfig({
+          isOpen: true,
+          title: 'Sessão Encerrada',
+          message: 'O anfitrião saiu da sessão',
+          type: 'alert',
+        });
+        setSessionStatus('finished');
+      });
+
       await newConnection.start();
       console.log('🔌 Player connected to hub');
 
-      console.log('📡 Invoking JoinPlayerByCode:', {
-        sessionCode: sessionCode || data.sessionId,
+      const codeToUse = sessionCode || data.sessionId;
+      console.log('🎮 Joining session with:', { 
+        code: codeToUse, 
         playerName: data.playerName,
-        playerId: data.playerId
+        playerId: data.playerId 
       });
 
       await newConnection.invoke(
         'JoinPlayerByCode',
-        sessionCode || data.sessionId,
+        codeToUse,
         data.playerName,
         data.playerId
       );
@@ -285,33 +380,101 @@ const PlayerSessionPage: React.FC = () => {
       setModalConfig({
         isOpen: true,
         title: 'Erro de Conexão',
-        message: 'Não foi possível conectar ao servidor',
+        message: error instanceof Error ? error.message : 'Não foi possível conectar ao servidor',
         type: 'error',
       });
     }
   };
 
   /* =====================================================
-     MODAL HANDLERS
+     FETCH LEADERBOARD
   ====================================================== */
+  const fetchRoundLeaderboard = async () => {
+    const targetSessionId = playerData?.sessionId || confirmedSessionId || sessionCode;
+    if (!targetSessionId || !playerData?.playerId) {
+      console.log('⚠️ Missing data for leaderboard fetch:', { targetSessionId, playerId: playerData?.playerId });
+      return;
+    }
 
-  const handleModalConfirm = () => {
-    setModalConfig(prev => ({ ...prev, isOpen: false }));
-    navigate('/join-session');
+    try {
+      console.log('📊 Fetching leaderboard for session:', targetSessionId);
+      
+      const res = await fetch(`${apiBaseUrl}/api/GameSession/${targetSessionId}/leaderboard`);
+      if (!res.ok) {
+        console.error('❌ Leaderboard fetch failed:', res.status, res.statusText);
+        return;
+      }
+
+      const data = await res.json();
+      console.log('📊 Raw leaderboard data:', data);
+
+      const entries: LeaderboardEntry[] = Array.isArray(data)
+        ? data.map((entry: any, index: number) => {
+            const playerName = entry?.player ?? entry?.Player ?? entry?.playerName ?? entry?.PlayerName ?? 'Jogador';
+            const score = Number(entry?.score ?? entry?.Score ?? entry?.totalScore ?? entry?.TotalScore ?? 0);
+            
+            console.log(`  Player ${index + 1}:`, { playerName, score, raw: entry });
+            
+            return {
+              playerName,
+              score,
+              rank: index + 1
+            };
+          })
+        : [];
+
+      console.log('📊 Processed entries:', entries);
+
+      // Encontrar jogador atual (case-insensitive)
+      const currentPlayerName = playerData.playerName.toLowerCase().trim();
+      const currentPlayer = entries.find(e => 
+        e.playerName.toLowerCase().trim() === currentPlayerName
+      );
+
+      console.log('👤 Current player:', { 
+        searchName: currentPlayerName, 
+        found: currentPlayer 
+      });
+
+      setPlayerLeaderboard(currentPlayer || null);
+      setTopLeaderboard(entries.slice(0, 3));
+    } catch (err) {
+      console.error('❌ Erro ao carregar leaderboard:', err);
+    }
   };
 
   /* =====================================================
      SUBMIT ANSWER
   ====================================================== */
-
   const submitAnswer = async () => {
-    if (!selectedAnswer || hasAnswered || !connection) return;
+    if (!selectedAnswer || hasAnswered || !connection) {
+      console.log('⚠️ Cannot submit:', { selectedAnswer, hasAnswered, connection: !!connection });
+      return;
+    }
 
     setHasAnswered(true);
 
-    const targetSessionId =
-      playerData?.sessionId || confirmedSessionId || sessionCode;
-    if (!targetSessionId || !currentRoundId || !playerData?.playerId || !currentQuestion) return;
+    const targetSessionId = playerData?.sessionId || confirmedSessionId || sessionCode;
+    
+    if (!targetSessionId) {
+      console.error('❌ No session ID available');
+      return;
+    }
+
+    if (!currentRoundId) {
+      console.error('❌ No round ID available');
+      return;
+    }
+
+    if (!playerData?.playerId) {
+      console.error('❌ No player ID available');
+      return;
+    }
+
+    if (!currentQuestion) {
+      console.error('❌ No current question');
+      return;
+    }
 
     const isOrderingAnswer = Array.isArray(selectedAnswer);
     const payload = {
@@ -322,6 +485,13 @@ const PlayerSessionPage: React.FC = () => {
       basePoints: currentQuestion.points ?? 0,
     };
 
+    console.log('📤 Submitting answer:', { 
+      targetSessionId, 
+      currentRoundId, 
+      playerId: playerData.playerId,
+      payload 
+    });
+
     try {
       const response = await fetch(
         `${apiBaseUrl}/api/GameSession/${targetSessionId}/round/${currentRoundId}/answer-with-score/${playerData.playerId}`,
@@ -331,25 +501,78 @@ const PlayerSessionPage: React.FC = () => {
           body: JSON.stringify(payload),
         }
       );
+      
+      console.log('📥 Answer response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
-        setLastPoints(typeof data?.points === 'number' ? data.points : 0);
+        console.log('📥 Answer response data:', data);
+        
+        const earnedPoints = typeof data?.points === 'number' ? data.points : 0;
+        setLastPoints(earnedPoints);
+
+        // Determinar se acertou (guardar para mostrar nos resultados)
+        let isCorrect = false;
+        let correctAnswer: any = null;
+
+        if (currentQuestion.type === 'Ordering') {
+          const correctOrder = currentQuestion.options
+            ?.filter(opt => opt.correctOrder !== undefined)
+            .sort((a, b) => (a.correctOrder ?? 0) - (b.correctOrder ?? 0))
+            .map(opt => opt.id);
+          
+          isCorrect = JSON.stringify(selectedAnswer) === JSON.stringify(correctOrder);
+          correctAnswer = correctOrder;
+        } else {
+          const correctOpt = currentQuestion.options?.find(opt => opt.isCorrect === true);
+          isCorrect = selectedAnswer === correctOpt?.id;
+          correctAnswer = correctOpt?.id;
+        }
+
+        console.log('✅ Answer result:', { isCorrect, earnedPoints, correctAnswer });
+
+        setAnswerResult({
+          isCorrect,
+          correctAnswer,
+          earnedPoints
+        });
+
+        // Buscar leaderboard atualizado imediatamente
+        await fetchRoundLeaderboard();
+
+        // Mudar para estado de espera (não mostrar feedback ainda)
+        setSessionStatus('waiting-next');
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Answer submission failed:', errorText);
       }
     } catch (error) {
-      console.error('Erro ao enviar resposta:', error);
+      console.error('❌ Erro ao enviar resposta:', error);
     }
 
-    await connection.invoke(
-      'PlayerAnswered',
-      targetSessionId,
-      connection.connectionId
-    );
+    try {
+      await connection.invoke(
+        'PlayerAnswered',
+        targetSessionId,
+        connection.connectionId
+      );
+      console.log('✅ PlayerAnswered signal sent');
+    } catch (error) {
+      console.error('❌ Error sending PlayerAnswered signal:', error);
+    }
   };
 
   /* =====================================================
-     RENDER
+     MODAL HANDLERS
   ====================================================== */
+  const handleModalConfirm = () => {
+    setModalConfig(prev => ({ ...prev, isOpen: false }));
+    navigate('/join-session');
+  };
 
+  /* =====================================================
+     RENDER QUESTION
+  ====================================================== */
   const renderQuestion = () => {
     if (!currentQuestion) return null;
 
@@ -357,24 +580,48 @@ const PlayerSessionPage: React.FC = () => {
 
     if (currentQuestion.type === 'MultipleChoice') {
       return (
-        <div className="space-y-3">
-          {options.map((option, i) => (
-            <button
-              key={option.id}
-              disabled={hasAnswered}
-              onClick={() => setSelectedAnswer(option.id)}
-              className={`w-full p-5 rounded-2xl border-2 font-semibold text-lg transition-all duration-300 transform hover:scale-[1.02] ${
-                selectedAnswer === option.id
-                  ? 'border-yellow-400 bg-yellow-400/30 shadow-lg shadow-yellow-400/50'
-                  : 'border-white/30 bg-white/10 hover:border-white/50 hover:bg-white/15'
-              } ${hasAnswered ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <span className="inline-block w-8 h-8 rounded-full bg-white/20 mr-3 text-center leading-8">
-                {String.fromCharCode(65 + i)}
-              </span>
-              {option.text}
-            </button>
-          ))}
+        <div className="space-y-3 md:space-y-4">
+          {options.map((option, i) => {
+            const isSelected = selectedAnswer === option.id;
+            
+            return (
+              <button
+                key={option.id}
+                disabled={hasAnswered}
+                onClick={() => !hasAnswered && setSelectedAnswer(option.id)}
+                className={`
+                  group relative w-full p-5 md:p-6 rounded-2xl border-2 font-semibold text-base md:text-lg
+                  transition-all duration-300 transform
+                  ${isSelected 
+                    ? 'border-yellow-400 bg-gradient-to-r from-yellow-400/30 to-orange-400/30 shadow-xl shadow-yellow-400/30 scale-[1.02]' 
+                    : 'border-white/30 bg-gradient-to-br from-white/10 to-white/5 hover:border-white/50 hover:from-white/15 hover:to-white/10 hover:scale-[1.02] active:scale-95'
+                  }
+                  ${hasAnswered ? 'cursor-default opacity-75' : 'cursor-pointer'}
+                `}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`
+                    flex-shrink-0 flex items-center justify-center
+                    w-10 h-10 md:w-12 md:h-12 rounded-xl
+                    text-base md:text-lg font-black
+                    transition-all duration-300
+                    ${isSelected 
+                      ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg' 
+                      : 'bg-white/20 text-white/90 group-hover:bg-white/30'
+                    }
+                  `}>
+                    {String.fromCharCode(65 + i)}
+                  </div>
+                  <span className="text-left flex-1">{option.text}</span>
+                  {isSelected && (
+                    <div className="flex-shrink-0 text-yellow-400 text-2xl animate-bounce">
+                      ✓
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       );
     }
@@ -383,27 +630,50 @@ const PlayerSessionPage: React.FC = () => {
       const trueFalseOptions = options.length === 2
         ? options
         : [
-          { id: 'true', text: 'Verdadeiro' },
-          { id: 'false', text: 'Falso' }
+          { id: 'true', text: 'Verdadeiro', isCorrect: false },
+          { id: 'false', text: 'Falso', isCorrect: false }
         ];
 
       return (
-        <div className="grid grid-cols-2 gap-4">
-          {trueFalseOptions.map(option => (
-            <button
-              key={option.id}
-              disabled={hasAnswered}
-              onClick={() => setSelectedAnswer(option.id)}
-              className={`p-8 rounded-2xl border-2 font-bold text-xl transition-all duration-300 transform hover:scale-105 ${
-                selectedAnswer === option.id
-                  ? 'border-yellow-400 bg-yellow-400/30 shadow-lg shadow-yellow-400/50'
-                  : 'border-white/30 bg-white/10 hover:border-white/50 hover:bg-white/15'
-              } ${hasAnswered ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {option.text.trim().charAt(0).toUpperCase()}
-              <div className="text-sm mt-2">{option.text}</div>
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-4 md:gap-6">
+          {trueFalseOptions.map(option => {
+            const isSelected = selectedAnswer === option.id;
+            const isTrue = option.text.trim().toLowerCase() === 'verdadeiro';
+            
+            return (
+              <button
+                key={option.id}
+                disabled={hasAnswered}
+                onClick={() => !hasAnswered && setSelectedAnswer(option.id)}
+                className={`
+                  group relative p-8 md:p-10 rounded-2xl border-2 font-bold text-lg md:text-xl
+                  transition-all duration-300 transform
+                  ${isSelected 
+                    ? isTrue
+                      ? 'border-green-400 bg-gradient-to-br from-green-400/30 to-emerald-500/20 shadow-xl shadow-green-400/30 scale-105'
+                      : 'border-red-400 bg-gradient-to-br from-red-400/30 to-rose-500/20 shadow-xl shadow-red-400/30 scale-105'
+                    : 'border-white/30 bg-gradient-to-br from-white/10 to-white/5 hover:border-white/50 hover:from-white/15 hover:to-white/10 hover:scale-105 active:scale-95'
+                  }
+                  ${hasAnswered ? 'cursor-default opacity-75' : 'cursor-pointer'}
+                `}
+              >
+                <div className="flex flex-col items-center gap-3">
+                  <div className={`
+                    text-5xl md:text-6xl transition-all duration-300
+                    ${isSelected ? 'scale-110 drop-shadow-lg' : 'group-hover:scale-110'}
+                  `}>
+                    {isTrue ? '✓' : '✗'}
+                  </div>
+                  <div className="text-sm md:text-base font-semibold">{option.text}</div>
+                  {isSelected && (
+                    <div className="absolute top-3 right-3 text-yellow-400 text-2xl animate-bounce">
+                      ⭐
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       );
     }
@@ -411,86 +681,103 @@ const PlayerSessionPage: React.FC = () => {
     if (currentQuestion.type === 'Ordering') {
       return (
         <div className="space-y-4">
-          <div className="rounded-xl bg-white/10 px-5 py-4 text-sm border border-white/20">
-            <p className="text-center text-white/90 font-semibold">
-              ?? Arrasta para ordenar (1 = primeiro, {orderingItems.length} = ultimo)
+          <div className="rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/30 px-5 py-4 text-sm md:text-base backdrop-blur-sm">
+            <p className="text-center text-white font-semibold flex items-center justify-center gap-2">
+              <span className="text-2xl">🔀</span>
+              Arrasta para ordenar (1 = primeiro, {orderingItems.length} = último)
             </p>
           </div>
 
           <div className="space-y-3">
-            {orderingItems.map((item, index) => (
-              <div
-                key={item.id}
-                data-order-index={index}
-                className={`flex items-center justify-between rounded-xl border-2 px-5 py-4 text-white transition-all duration-300 touch-none ${
-                  draggingIndex === index
-                    ? "opacity-60 border-yellow-400/50 bg-yellow-400/20"
-                    : hasAnswered
-                    ? "opacity-50 cursor-not-allowed border-white/20 bg-white/5"
-                    : "border-white/30 bg-white/10 hover:bg-white/15 hover:border-white/50 cursor-move"
-                }`}
-                draggable={!hasAnswered}
-                onDragStart={(event) => {
-                  if (hasAnswered) return;
-                  dragIndexRef.current = index;
-                  setDraggingIndex(index);
-                  event.dataTransfer.effectAllowed = "move";
-                  const preview = buildDragPreview(item.text);
-                  event.dataTransfer.setDragImage(preview, 20, 20);
-                  requestAnimationFrame(() => preview.remove());
-                }}
-                onDragOver={(event) => {
-                  if (hasAnswered) return;
-                  event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  if (hasAnswered) return;
-                  event.preventDefault();
-                  const fromIndex = dragIndexRef.current;
-                  if (fromIndex === null || fromIndex === index) return;
-                  moveOrderingItem(fromIndex, index);
-                  dragIndexRef.current = null;
-                  setDraggingIndex(null);
-                }}
-                onDragEnd={() => {
-                  dragIndexRef.current = null;
-                  setDraggingIndex(null);
-                }}
-                onTouchStart={(event) => {
-                  if (hasAnswered) return;
-                  dragIndexRef.current = index;
-                  setDraggingIndex(index);
-                }}
-                onTouchMove={(event) => {
-                  if (hasAnswered) return;
-                  const touch = event.touches[0];
-                  const target = document.elementFromPoint(
-                    touch.clientX,
-                    touch.clientY
-                  ) as HTMLElement | null;
-                  const droppable = target?.closest("[data-order-index]") as HTMLElement | null;
-                  if (!droppable) return;
-                  const nextIndex = Number(droppable.dataset.orderIndex ?? index);
-                  const fromIndex = dragIndexRef.current;
-                  if (fromIndex === null || fromIndex === nextIndex) return;
-                  moveOrderingItem(fromIndex, nextIndex);
-                  dragIndexRef.current = nextIndex;
-                  setDraggingIndex(nextIndex);
-                }}
-                onTouchEnd={() => {
-                  dragIndexRef.current = null;
-                  setDraggingIndex(null);
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
-                    {index + 1}
-                  </span>
-                  <span>{item.text}</span>
+            {orderingItems.map((item, index) => {
+              return (
+                <div
+                  key={item.id}
+                  data-order-index={index}
+                  className={`
+                    group relative flex items-center justify-between
+                    rounded-xl border-2 px-5 py-4 md:px-6 md:py-5
+                    text-white transition-all duration-300 touch-none
+                    ${draggingIndex === index
+                      ? 'opacity-60 border-yellow-400/50 bg-gradient-to-r from-yellow-400/30 to-orange-400/20 scale-95 rotate-2'
+                      : hasAnswered
+                      ? 'opacity-75 cursor-not-allowed border-white/20 bg-gradient-to-br from-white/5 to-white/2'
+                      : 'border-white/30 bg-gradient-to-br from-white/10 to-white/5 hover:from-white/15 hover:to-white/10 hover:border-white/50 cursor-move hover:scale-[1.02] active:scale-95'
+                    }
+                  `}
+                  draggable={!hasAnswered}
+                  onDragStart={(event) => {
+                    if (hasAnswered) return;
+                    dragIndexRef.current = index;
+                    setDraggingIndex(index);
+                    event.dataTransfer.effectAllowed = "move";
+                    const preview = buildDragPreview(item.text);
+                    event.dataTransfer.setDragImage(preview, 20, 20);
+                    requestAnimationFrame(() => preview.remove());
+                  }}
+                  onDragOver={(event) => {
+                    if (hasAnswered) return;
+                    event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    if (hasAnswered) return;
+                    event.preventDefault();
+                    const fromIndex = dragIndexRef.current;
+                    if (fromIndex === null || fromIndex === index) return;
+                    moveOrderingItem(fromIndex, index);
+                    dragIndexRef.current = null;
+                    setDraggingIndex(null);
+                  }}
+                  onDragEnd={() => {
+                    dragIndexRef.current = null;
+                    setDraggingIndex(null);
+                  }}
+                  onTouchStart={(event) => {
+                    if (hasAnswered) return;
+                    dragIndexRef.current = index;
+                    setDraggingIndex(index);
+                  }}
+                  onTouchMove={(event) => {
+                    if (hasAnswered) return;
+                    const touch = event.touches[0];
+                    const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
+                    const droppable = target?.closest("[data-order-index]") as HTMLElement | null;
+                    if (!droppable) return;
+                    const nextIndex = Number(droppable.dataset.orderIndex ?? index);
+                    const fromIndex = dragIndexRef.current;
+                    if (fromIndex === null || fromIndex === nextIndex) return;
+                    moveOrderingItem(fromIndex, nextIndex);
+                    dragIndexRef.current = nextIndex;
+                    setDraggingIndex(nextIndex);
+                  }}
+                  onTouchEnd={() => {
+                    dragIndexRef.current = null;
+                    setDraggingIndex(null);
+                  }}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`
+                      flex items-center justify-center
+                      w-10 h-10 md:w-12 md:h-12 rounded-xl
+                      text-base md:text-lg font-black
+                      transition-all duration-300
+                      ${draggingIndex === index
+                        ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg'
+                        : 'bg-white/20 text-white/90 group-hover:bg-white/30'
+                      }
+                    `}>
+                      {index + 1}
+                    </div>
+                    <span className="text-sm md:text-base font-medium">{item.text}</span>
+                  </div>
+                  {!hasAnswered && (
+                    <div className="flex-shrink-0 text-white/40 text-xl md:text-2xl group-hover:text-white/60 transition-colors">
+                      ⋮⋮
+                    </div>
+                  )}
                 </div>
-                <span className="text-white/60 text-sm">Arrasta</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       );
@@ -499,6 +786,9 @@ const PlayerSessionPage: React.FC = () => {
     return null;
   };
 
+  /* =====================================================
+     RENDER
+  ====================================================== */
   return (
     <>
       <ConfirmModal
@@ -511,61 +801,80 @@ const PlayerSessionPage: React.FC = () => {
         onCancel={() => {}}
       />
 
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center text-white p-6">
-        {/* Debug Info */}
-        <div className="fixed top-4 right-4 bg-black/50 text-white text-xs p-2 rounded-lg backdrop-blur-sm z-50">
-          <div>Status: {sessionStatus}</div>
-          <div>Question: {currentQuestion ? '✓' : '✗'}</div>
-          <div>Round: {roundNumber}</div>
-        </div>
-
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center text-white p-4">
+        
         {sessionStatus === 'waiting' && (
-          <div className="text-center">
-            <div className="text-6xl mb-6 animate-pulse">🧠</div>
-            <h1 className="text-3xl font-bold">A aguardar início do quiz...</h1>
-            <p className="text-gray-400 mt-2">O anfitrião vai começar em breve</p>
+          <div className="text-center animate-fadeIn">
+            <div className="text-7xl md:text-8xl mb-8 animate-pulse drop-shadow-2xl">🧠</div>
+            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-8 md:p-10 shadow-2xl max-w-lg mx-auto">
+              <h1 className="text-3xl md:text-4xl font-black mb-4 bg-gradient-to-r from-yellow-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+                A aguardar início...
+              </h1>
+              <p className="text-gray-300 text-base md:text-lg">O anfitrião vai começar em breve</p>
+            </div>
           </div>
         )}
 
         {sessionStatus === 'waiting-next' && (
-          <div className="text-center">
-            <div className="text-6xl mb-6 animate-bounce">⏳</div>
-            <h1 className="text-3xl font-bold">A preparar próxima pergunta...</h1>
+          <div className="text-center animate-fadeIn">
+            <div className="text-7xl md:text-8xl mb-8 animate-bounce drop-shadow-2xl">⏳</div>
+            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-8 md:p-10 shadow-2xl max-w-lg mx-auto">
+              <h1 className="text-3xl md:text-4xl font-black mb-4 bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                Resposta enviada!
+              </h1>
+              <p className="text-gray-300 text-base md:text-lg">A aguardar outros jogadores...</p>
+            </div>
           </div>
         )}
 
         {sessionStatus === 'finished' && (
-          <div className="text-center">
-            <div className="text-6xl mb-6">🎉</div>
-            <h1 className="text-4xl font-bold mb-4">Quiz Terminado!</h1>
-            <p className="text-gray-300">Obrigado por jogares</p>
+          <div className="text-center animate-fadeIn">
+            <div className="text-7xl md:text-8xl mb-8 drop-shadow-2xl">🎉</div>
+            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-8 md:p-10 shadow-2xl max-w-lg mx-auto">
+              <h1 className="text-4xl md:text-5xl font-black mb-4 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 bg-clip-text text-transparent">
+                Quiz Terminado!
+              </h1>
+              <p className="text-gray-300 text-base md:text-lg">Obrigado por jogares</p>
+            </div>
           </div>
         )}
 
         {sessionStatus === 'question' && currentQuestion && (
-          <div className="max-w-3xl w-full">
-            {/* Header with Round and Timer */}
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20">
+          <div className="max-w-4xl w-full animate-fadeIn">
+            {/* Header Card */}
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-5 md:p-7 mb-5 md:mb-6 border border-white/20 shadow-2xl">
               <div className="flex justify-between items-center mb-4">
-                <div className="text-lg">
-                  <span className="text-gray-400">Pergunta</span>
-                  <span className="ml-2 font-bold text-2xl text-yellow-400">
-                    {roundNumber}
-                  </span>
+                <div className="flex items-center gap-3">
+                  <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl px-4 py-2 shadow-lg">
+                    <span className="text-sm md:text-base font-bold text-white">
+                      Pergunta {roundNumber}
+                    </span>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <div className={`text-4xl font-bold ${timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-yellow-400'}`}>
+                  <div className={`
+                    text-4xl md:text-5xl font-black transition-all duration-300
+                    ${timeLeft <= 5 
+                      ? 'text-red-400 animate-pulse scale-110 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]' 
+                      : 'text-yellow-400 drop-shadow-lg'
+                    }
+                  `}>
                     {timeLeft}s
                   </div>
                 </div>
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
+              <div className="relative w-full bg-black/20 rounded-full h-3 overflow-hidden shadow-inner">
                 <div
-                  className={`h-full transition-all duration-1000 ${
-                    timeLeft <= 5 ? 'bg-red-400' : 'bg-yellow-400'
-                  }`}
+                  className={`
+                    absolute top-0 left-0 h-full rounded-full
+                    transition-all duration-1000 ease-linear
+                    ${timeLeft <= 5 
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]' 
+                      : 'bg-gradient-to-r from-yellow-400 to-orange-500 shadow-[0_0_10px_rgba(251,191,36,0.3)]'
+                    }
+                  `}
                   style={{
                     width: `${(timeLeft / (currentQuestion.timeLimit || 30)) * 100}%`,
                   }}
@@ -574,48 +883,224 @@ const PlayerSessionPage: React.FC = () => {
             </div>
 
             {/* Question Card */}
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 mb-6 border border-white/20">
-              <h2 className="text-2xl font-bold text-center leading-relaxed">
-                {currentQuestion.title}
-              </h2>
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-7 md:p-10 mb-5 md:mb-6 border border-white/20 shadow-2xl">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-xl">
+                  <span className="text-2xl md:text-3xl">❓</span>
+                </div>
+                <h2 className="text-xl md:text-2xl lg:text-3xl font-bold leading-relaxed flex-1">
+                  {currentQuestion?.title}
+                </h2>
+              </div>
             </div>
+        
 
-            {/* Answers */}
+            {/* Options */}
             {renderQuestion()}
 
             {/* Submit Button */}
             {selectedAnswer && !hasAnswered && (
               <button
                 onClick={submitAnswer}
-                className="mt-6 w-full bg-gradient-to-r from-yellow-400 to-pink-500 p-4 rounded-2xl font-bold text-xl shadow-lg shadow-yellow-400/50 hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
+                className="
+                  mt-6 w-full
+                  bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500
+                  p-5 md:p-6 rounded-2xl
+                  font-black text-xl md:text-2xl text-white
+                  shadow-2xl shadow-yellow-500/50
+                  hover:shadow-yellow-500/70 hover:scale-[1.02]
+                  active:scale-95
+                  transition-all duration-300
+                  border-2 border-yellow-300/50
+                  animate-pulse
+                "
               >
-                Confirmar Resposta ✓
+                <span className="flex items-center justify-center gap-3">
+                  <span>Confirmar Resposta</span>
+                  <span className="text-3xl">✓</span>
+                </span>
               </button>
             )}
-
             {/* Answer Submitted */}
             {hasAnswered && (
-              <div className="mt-6 bg-green-500/20 border-2 border-green-500/50 rounded-2xl p-4 text-center">
-                <span className="text-green-400 text-xl font-semibold">
-                  ✓ Resposta enviada com sucesso!
-                </span>
+              <div className="mt-6 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/50 rounded-2xl p-5 backdrop-blur-sm shadow-xl">
+                <div className="flex items-center justify-center gap-3">
+                  <span className="text-3xl animate-bounce">✓</span>
+                  <span className="text-green-300 text-lg md:text-xl font-bold">
+                    Resposta enviada com sucesso!
+                  </span>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Fallback para estados inesperados */}
-        {sessionStatus !== 'waiting' && 
-         sessionStatus !== 'waiting-next' && 
-         sessionStatus !== 'finished' && 
-         sessionStatus !== 'question' && (
-          <div className="text-center">
-            <div className="text-6xl mb-6">🤔</div>
-            <h1 className="text-3xl font-bold">Estado desconhecido</h1>
-            <p className="text-gray-400 mt-2">Status: {sessionStatus}</p>
+        {/* Round Results */}
+        {sessionStatus === 'round-results' && (
+          <div className="max-w-3xl w-full animate-fadeIn">
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-6 md:p-10 border border-white/20 shadow-2xl">
+              <div className="text-center mb-8 md:mb-10">
+                <div className="text-6xl md:text-7xl mb-6 drop-shadow-2xl animate-bounce">🏆</div>
+                <h2 className="text-3xl md:text-4xl font-black mb-2 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 bg-clip-text text-transparent">
+                  Resultados da Ronda
+                </h2>
+              </div>
+
+              {/* Answer Result */}
+              {answerResult && (
+                <div className={`
+                  mb-8 rounded-3xl p-7 md:p-9 border-2 shadow-2xl backdrop-blur-sm
+                  ${answerResult.isCorrect
+                    ? 'bg-gradient-to-br from-green-500/30 to-emerald-600/20 border-green-400/50'
+                    : 'bg-gradient-to-br from-red-500/30 to-rose-600/20 border-red-400/50'
+                  }
+                `}>
+                  <div className="flex flex-col gap-5">
+                    <div className="flex items-center justify-center gap-5">
+                      <span className="text-7xl md:text-8xl drop-shadow-2xl">
+                        {answerResult.isCorrect ? '✓' : '✗'}
+                      </span>
+                      <div className="text-center">
+                        <div className={`
+                          text-3xl md:text-4xl font-black mb-2
+                          ${answerResult.isCorrect ? 'text-green-200' : 'text-red-200'}
+                        `}>
+                          {answerResult.isCorrect ? 'Correto!' : 'Incorreto'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Points Summary */}
+                    <div className="grid grid-cols-2 gap-5 pt-5 border-t-2 border-white/20">
+                      <div className="text-center bg-black/20 rounded-2xl p-5 backdrop-blur-sm">
+                        <div className="text-sm md:text-base text-white/70 mb-2 font-semibold">
+                          Pontos desta ronda
+                        </div>
+                        <div className={`
+                          text-3xl md:text-4xl font-black drop-shadow-lg
+                          ${answerResult.isCorrect ? 'text-green-300' : 'text-red-300'}
+                        `}>
+                          +{answerResult.earnedPoints}
+                        </div>
+                      </div>
+                      <div className="text-center bg-black/20 rounded-2xl p-5 backdrop-blur-sm">
+                        <div className="text-sm md:text-base text-white/70 mb-2 font-semibold">
+                          Pontos totais
+                        </div>
+                        <div className="text-3xl md:text-4xl font-black text-yellow-300 drop-shadow-lg">
+                          {playerLeaderboard?.score || 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Player Position */}
+              {playerLeaderboard && (
+                <div className={`
+                  mb-8 rounded-3xl p-7 md:p-9 border-2 shadow-2xl backdrop-blur-sm
+                  ${playerLeaderboard.rank === 1
+                    ? 'bg-gradient-to-br from-yellow-400/40 to-yellow-600/20 border-yellow-400/60'
+                    : playerLeaderboard.rank === 2
+                    ? 'bg-gradient-to-br from-gray-300/40 to-gray-400/20 border-gray-300/60'
+                    : playerLeaderboard.rank === 3
+                    ? 'bg-gradient-to-br from-amber-600/40 to-amber-700/20 border-amber-600/60'
+                    : 'bg-gradient-to-br from-white/15 to-white/5 border-white/30'
+                  }
+                `}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-5">
+                      <div className={`
+                        text-5xl md:text-6xl font-black drop-shadow-2xl
+                        ${playerLeaderboard.rank <= 3 ? 'text-white' : 'text-white/70'}
+                      `}>
+                        #{playerLeaderboard.rank}
+                      </div>
+                      <div>
+                        <div className="text-base md:text-lg font-semibold text-white/80 mb-1">
+                          A tua posição
+                        </div>
+                        <div className="text-2xl md:text-3xl font-black text-white drop-shadow-lg">
+                          {playerData.playerName}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-4xl md:text-5xl font-black text-yellow-300 drop-shadow-lg">
+                        {playerLeaderboard.score}
+                      </div>
+                      <div className="text-xs md:text-sm text-white/60 font-semibold">pontos</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Top 3 */}
+              {topLeaderboard.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xl md:text-2xl font-black mb-5 text-center text-white/90 flex items-center justify-center gap-2">
+                  <span className="text-3xl">🥇</span>
+                  <span>Top 3</span>
+                </h3>
+
+                <div className="space-y-3">
+                  {topLeaderboard.map((entry, index) => (
+                    <div
+                      key={index}
+                      className={`
+                        flex items-center justify-between rounded-2xl p-5 backdrop-blur-sm
+                        ${index === 0
+                          ? 'bg-gradient-to-r from-yellow-400/30 to-yellow-600/20 border-2 border-yellow-400/60'
+                          : index === 1
+                          ? 'bg-gradient-to-r from-gray-300/30 to-gray-400/20 border-2 border-gray-300/60'
+                          : 'bg-gradient-to-r from-amber-600/30 to-amber-700/20 border-2 border-amber-600/60'
+                        }
+                      `}
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className="text-3xl md:text-4xl drop-shadow-lg">
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                        </span>
+                        <span className="font-bold text-base md:text-lg">
+                          {entry.playerName}
+                        </span>
+                      </div>
+
+                      <span className="text-xl md:text-2xl font-black">
+                        {entry.score}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+
+            <div className="text-center text-white/60 text-base md:text-lg animate-pulse font-semibold">
+              ⏳ A aguardar próxima pergunta...
+            </div>
+
+            </div>
           </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(30px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
     </>
   );
 };

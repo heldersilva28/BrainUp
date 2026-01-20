@@ -47,10 +47,33 @@ const HostSessionPage: React.FC = () => {
   const [isFinalLeaderboard, setIsFinalLeaderboard] = useState(false);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState('');
+  const [correctAnswerInfo, setCorrectAnswerInfo] = useState<{
+    type: string;
+    correctOption?: QuestionOption;
+    orderedOptions?: QuestionOption[];
+  } | null>(null);
+  const [showFinalResults, setShowFinalResults] = useState(false);
+  const [finalStats, setFinalStats] = useState<{
+    totalQuestions: number;
+    averageScore: number;
+    highestScore: number;
+  } | null>(null);
 
   const currentQuestion = quizData?.questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === (quizData?.questions.length || 0) - 1;
 
+  useEffect(() => {
+    if (showFinalResults) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+  
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [showFinalResults]);
+  
   /* =====================================================
      TIMER AUTO-ADVANCE
   ====================================================== */
@@ -199,18 +222,74 @@ const HostSessionPage: React.FC = () => {
   ====================================================== */
   const startRoundWithQuestion = async (question: Question, roundNum: number) => {
     if (!connection || !question) {
-      console.error(' Cannot start round: missing connection or question', { 
+      console.error('❌ Cannot start round: missing connection or question', { 
         hasConnection: !!connection, 
         hasQuestion: !!question 
       });
       return;
     }
 
-    console.log(' Starting round', roundNum, question);
+    console.log('🎮 Starting round', roundNum, question);
 
     setAnsweredPlayers([]);
     setTimeLeft(question.timeLimit);
     setIsTimerActive(true);
+
+    // Buscar informação completa da pergunta do backend (com isCorrect e correctOrder)
+    try {
+      const questionRes = await authFetch(`${apiBaseUrl}/api/Questions/${question.id}`);
+      
+      if (questionRes.ok) {
+        const fullQuestion = await questionRes.json();
+        console.log('📥 Full question from API:', fullQuestion);
+        
+        // Buscar as options com informação de correção
+        const optionsRes = await authFetch(`${apiBaseUrl}/api/Questions/${question.id}/options`);
+        
+        if (optionsRes.ok) {
+          const options = await optionsRes.json();
+          console.log('📥 Options from API:', options);
+          
+          // Normalizar options
+          const normalizedOptions = options.map((opt: any) => ({
+            id: opt.id,
+            text: opt.optionText,
+            isCorrect: opt.isCorrect,
+            correctOrder: opt.correctOrder
+          }));
+
+          if (fullQuestion.type === 'ordering' || question.type === 'Ordering') {
+            // Ordenar pelas correctOrder
+            const sortedOptions = [...normalizedOptions].sort((a, b) => {
+              const orderA = a.correctOrder ?? 999;
+              const orderB = b.correctOrder ?? 999;
+              return orderA - orderB;
+            });
+            
+            setCorrectAnswerInfo({
+              type: 'Ordering',
+              orderedOptions: sortedOptions
+            });
+          } else {
+            // Para MultipleChoice e TrueFalse, encontrar a opção correta
+            const correctOpt = normalizedOptions.find((opt: any) => opt.isCorrect === true);
+            
+            setCorrectAnswerInfo({
+              type: question.type,
+              correctOption: correctOpt
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('⚠️ Error fetching full question details:', err);
+      // Fallback: usar dados que já temos
+      setCorrectAnswerInfo({
+        type: question.type,
+        correctOption: undefined,
+        orderedOptions: undefined
+      });
+    }
 
     if (!sessionId) return;
 
@@ -225,7 +304,7 @@ const HostSessionPage: React.FC = () => {
 
     if (!roundResponse.ok) {
       const message = await roundResponse.text();
-      console.error('?? Failed to start round in API:', message);
+      console.error('❌ Failed to start round in API:', message);
       setIsTimerActive(false);
       return;
     }
@@ -234,7 +313,7 @@ const HostSessionPage: React.FC = () => {
     const roundId = roundData?.roundId ?? roundData?.RoundId;
 
     if (!roundId) {
-      console.error('?? Missing roundId from API response');
+      console.error('❌ Missing roundId from API response');
       setIsTimerActive(false);
       return;
     }
@@ -271,8 +350,23 @@ const HostSessionPage: React.FC = () => {
     if (!connection || !sessionId) return;
 
     if (isFinalLeaderboard) {
+      // Calcular estatísticas finais
+      const totalQuestions = quizData.questions.length;
+      const averageScore = leaderboardEntries.length > 0
+        ? leaderboardEntries.reduce((sum, entry) => sum + entry.score, 0) / leaderboardEntries.length
+        : 0;
+      const highestScore = leaderboardEntries.length > 0
+        ? Math.max(...leaderboardEntries.map(e => e.score))
+        : 0;
+
+      setFinalStats({
+        totalQuestions,
+        averageScore: Math.round(averageScore),
+        highestScore
+      });
+
       await connection.invoke('EndSession', sessionId);
-      navigate('/dashboard');
+      setShowFinalResults(true);
       return;
     }
 
@@ -284,6 +378,10 @@ const HostSessionPage: React.FC = () => {
       const nextQuestion = quizData.questions[nextIndex];
       startRoundWithQuestion(nextQuestion, nextIndex + 1);
     }, 100);
+  };
+
+  const goToDashboard = () => {
+    navigate('/dashboard');
   };
 
   /* =====================================================
@@ -298,7 +396,7 @@ const HostSessionPage: React.FC = () => {
           {currentQuestion.options?.map((option, i) => (
             <div
               key={i}
-              className="rounded-xl border border-white/20 bg-white/5 px-5 py-4 text-white/80"
+              className="rounded-xl border border-white/20 bg-white/5 px-5 py-4 text-white/80 flex items-center"
             >
               <span className="inline-block w-8 h-8 rounded-full bg-white/20 mr-3 text-center leading-8">
                 {String.fromCharCode(65 + i)}
@@ -390,6 +488,7 @@ const HostSessionPage: React.FC = () => {
   }
 
   return (
+    <>
     <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-purple-700 via-indigo-700 to-pink-700 text-white">
       <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-8">
         {/* Header */}
@@ -440,10 +539,7 @@ const HostSessionPage: React.FC = () => {
             {renderOptions()}
 
             <div className="mt-8 flex justify-between items-center">
-              <div className="text-white/70">
-                <p className="text-sm">
-                </p>
-              </div>
+              <div className="text-white/70"></div>
               
               <button
                 onClick={nextQuestion}
@@ -456,9 +552,10 @@ const HostSessionPage: React.FC = () => {
         </main>
       </div>
 
-      {showLeaderboard && (
+      {/* Leaderboard Modal */}
+      {showLeaderboard && !showFinalResults && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
-          <div className="w-full max-w-2xl rounded-3xl border border-white/20 bg-white/10 p-8 backdrop-blur-md shadow-2xl">
+          <div className="w-full max-w-5xl rounded-3xl border border-white/20 bg-white/10 p-8 backdrop-blur-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em] text-white/60">
@@ -473,40 +570,95 @@ const HostSessionPage: React.FC = () => {
               </div>
             </div>
 
-            {isLoadingLeaderboard ? (
-              <div className="rounded-2xl border border-white/20 bg-white/5 px-5 py-4 text-white/70">
-                A carregar leaderboard...
-              </div>
-            ) : leaderboardError ? (
-              <div className="rounded-2xl border border-red-400/40 bg-red-400/10 px-5 py-4 text-red-200">
-                {leaderboardError}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {leaderboardEntries.map((entry, index) => (
-                  <div
-                    key={`${entry.name}-${index}`}
-                    className="flex items-center justify-between rounded-2xl border border-white/20 bg-white/5 px-5 py-4"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-sm font-bold">
-                        {index + 1}
-                      </div>
-                      <div className="text-lg font-semibold">{entry.name}</div>
-                    </div>
-                    <div className="rounded-xl border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold">
-                      {entry.score} pts
-                    </div>
-                  </div>
-                ))}
-                {leaderboardEntries.length === 0 && (
+            <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
+              {/* Leaderboard */}
+              <div>
+                {isLoadingLeaderboard ? (
                   <div className="rounded-2xl border border-white/20 bg-white/5 px-5 py-4 text-white/70">
-                    Ainda nao ha pontuacoes registadas.
+                    A carregar leaderboard...
+                  </div>
+                ) : leaderboardError ? (
+                  <div className="rounded-2xl border border-red-400/40 bg-red-400/10 px-5 py-4 text-red-200">
+                    {leaderboardError}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {leaderboardEntries.map((entry, index) => (
+                      <div
+                        key={`${entry.name}-${index}`}
+                        className="flex items-center justify-between rounded-2xl border border-white/20 bg-white/5 px-5 py-4 hover:bg-white/10 transition-all"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${
+                            index === 0 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white' :
+                            index === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-gray-900' :
+                            index === 2 ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white' :
+                            'bg-white/15 text-white/80'
+                          }`}>
+                            {index + 1}
+                          </div>
+                          <div className="text-lg font-semibold">{entry.name}</div>
+                        </div>
+                        <div className="rounded-xl border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold">
+                          {entry.score} pts
+                        </div>
+                      </div>
+                    ))}
+                    {leaderboardEntries.length === 0 && (
+                      <div className="rounded-2xl border border-white/20 bg-white/5 px-5 py-4 text-white/70">
+                        Ainda não há pontuações registadas.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
 
+              {/* Correct Answer Display */}
+              {correctAnswerInfo && (
+                <div className="lg:w-80">
+                  <div className="rounded-3xl border border-emerald-400/50 bg-gradient-to-br from-emerald-400/20 to-emerald-600/10 p-6 shadow-lg">
+                    <div className="mb-4 flex items-center gap-3">
+                      <svg className="h-6 w-6 text-emerald-300" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <h3 className="text-lg font-bold text-emerald-200">Resposta Correta</h3>
+                    </div>
+
+                    {correctAnswerInfo.type === 'Ordering' && correctAnswerInfo.orderedOptions && correctAnswerInfo.orderedOptions.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-xs text-emerald-100/80 mb-3 font-semibold uppercase tracking-wide">Ordem correta:</p>
+                        {correctAnswerInfo.orderedOptions.map((option, index) => (
+                          <div
+                            key={option.id}
+                            className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3"
+                          >
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-400/30 text-sm font-bold text-emerald-100">
+                              {index + 1}
+                            </span>
+                            <span className="text-sm font-medium text-emerald-50">{option.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : correctAnswerInfo.correctOption ? (
+                      <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-4">
+                        <p className="text-base font-semibold text-emerald-50">
+                          {correctAnswerInfo.correctOption.text}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-4">
+                        <p className="text-sm text-yellow-100/90 italic flex items-center gap-2">
+                          <svg className="h-5 w-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"></svg>
+                          <svg className="h-5 w-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="mt-8 flex justify-end">
               <button
                 onClick={continueAfterLeaderboard}
@@ -518,7 +670,165 @@ const HostSessionPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Final Results Screen */}
+      {showFinalResults && finalStats && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+
+          {/* Backdrop blur layer */}
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-indigo-900 to-pink-900 opacity-90" />
+
+          {/* Modal Container */}
+          <div
+            className="
+              relative w-full max-w-6xl max-h-[90vh]
+              overflow-y-auto rounded-3xl
+              backdrop-blur-xl bg-white/10 border border-white/20 shadow-2xl
+              animate-[modalEnter_0.5s_ease-out_forwards]
+            "
+          >
+
+            {/* 🔹 HEADER STICKY COM BLUR */}
+            <div className="text-center mb-8 sticky top-0 bg-gradient-to-br from-purple-900/90 via-indigo-900/90 to-pink-900/90 backdrop-blur z-10 py-6 rounded-t-3xl border-b border-white/20">
+              <div className="text-7xl mb-4 animate-bounce">🎉</div>
+              <h1 className="text-5xl font-black mb-2 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 bg-clip-text text-transparent">
+                Quiz Concluído!
+              </h1>
+              <p className="text-2xl text-white/80">{quizData.title}</p>
+            </div>
+
+            {/* 🔹 CONTEÚDO */}
+            <div className="p-6 md:p-10">
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <div className="rounded-3xl border border-white/30 bg-gradient-to-br from-blue-500/30 to-blue-600/20 p-8 backdrop-blur-xl shadow-2xl text-center">
+                  <div className="text-5xl mb-4">📝</div>
+                  <div className="text-4xl font-black mb-2">{finalStats.totalQuestions}</div>
+                  <div className="text-lg text-white/80">Perguntas</div>
+                </div>
+
+                <div className="rounded-3xl border border-white/30 bg-gradient-to-br from-green-500/30 to-green-600/20 p-8 backdrop-blur-xl shadow-2xl text-center">
+                  <div className="text-5xl mb-4">📊</div>
+                  <div className="text-4xl font-black mb-2">{finalStats.averageScore}</div>
+                  <div className="text-lg text-white/80">Pontuação Média</div>
+                </div>
+
+                <div className="rounded-3xl border border-white/30 bg-gradient-to-br from-yellow-500/30 to-orange-600/20 p-8 backdrop-blur-xl shadow-2xl text-center">
+                  <div className="text-5xl mb-4">👥</div>
+                  <div className="text-4xl font-black mb-2">{leaderboardEntries.length}</div>
+                  <div className="text-lg text-white/80">Participantes</div>
+                </div>
+              </div>
+
+              {/* Podium */}
+              <div className="rounded-3xl border border-white/30 bg-gradient-to-br from-white/15 to-white/5 p-8 backdrop-blur-xl shadow-2xl mb-10">
+                <h2 className="text-3xl font-black text-center mb-10">🏆 Top 3</h2>
+
+                <div className="flex items-end justify-center gap-6 mb-8">
+
+                  {/* 2nd Place */}
+                  {leaderboardEntries[1] && (
+                    <div className="flex flex-col items-center">
+                      <div className="w-28 h-28 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center text-6xl font-black text-gray-900 shadow-2xl mb-4 animate-pulse">
+                        2
+                      </div>
+                      <div className="rounded-2xl bg-gradient-to-br from-gray-300/30 to-gray-400/20 border border-gray-300/50 px-6 py-12 md:py-20 text-center shadow-xl">
+                        <div className="text-2xl font-bold mb-2">{leaderboardEntries[1].name}</div>
+                        <div className="text-4xl font-black text-gray-300">{leaderboardEntries[1].score} pts</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 1st Place */}
+                  {leaderboardEntries[0] && (
+                    <div className="flex flex-col items-center -mt-6 md:-mt-8">
+                      <div className="text-6xl mb-4 animate-bounce">👑</div>
+                      <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-7xl font-black text-white shadow-2xl mb-4 animate-pulse">
+                        1
+                      </div>
+                      <div className="rounded-2xl bg-gradient-to-br from-yellow-400/30 to-yellow-600/20 border-2 border-yellow-400/70 px-8 py-14 md:py-24 text-center shadow-2xl">
+                        <div className="text-3xl font-black mb-3">{leaderboardEntries[0].name}</div>
+                        <div className="text-5xl font-black text-yellow-400">{leaderboardEntries[0].score} pts</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3rd Place */}
+                  {leaderboardEntries[2] && (
+                    <div className="flex flex-col items-center">
+                      <div className="w-28 h-28 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center text-6xl font-black text-white shadow-2xl mb-4 animate-pulse">
+                        3
+                      </div>
+                      <div className="rounded-2xl bg-gradient-to-br from-amber-600/30 to-amber-700/20 border border-amber-600/50 px-6 py-12 md:py-20 text-center shadow-xl">
+                        <div className="text-2xl font-bold mb-2">{leaderboardEntries[2].name}</div>
+                        <div className="text-4xl font-black text-amber-400">{leaderboardEntries[2].score} pts</div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Remaining Players */}
+                {leaderboardEntries.length > 3 && (
+                  <div className="mt-8">
+                    <h3 className="text-xl font-bold text-center mb-4 text-white/80">
+                      Outros Participantes
+                    </h3>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {leaderboardEntries.slice(3).map((entry, index) => (
+                        <div
+                          key={`${entry.name}-${index + 3}`}
+                          className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-5 py-3 hover:bg-white/10 transition"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">
+                              {index + 4}
+                            </div>
+                            <span className="font-semibold">{entry.name}</span>
+                          </div>
+                          <span className="text-lg font-bold text-white/90">
+                            {entry.score} pts
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-center">
+                <button
+                  onClick={goToDashboard}
+                  className="rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 px-10 py-4 text-xl font-bold text-white shadow-2xl transition-all duration-300 hover:scale-105 hover:shadow-yellow-500/50"
+                >
+                  Voltar ao Dashboard
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.6s ease-out forwards;
+        }
+      `}</style>
     </div>
+    </>
   );
 };
 

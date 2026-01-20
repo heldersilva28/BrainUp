@@ -237,6 +237,54 @@ namespace BrainUp.API.Services
         }
 
         // -------------------------------------------------------
+        // GET OPTIONS FROM QUESTION (with correct info)
+        // -------------------------------------------------------
+        public async Task<List<QuestionOptionResponseDto>?> GetQuestionOptions(Guid questionId)
+        {
+            var question = await _context.Questions
+                .Include(q => q.Type)
+                .Include(q => q.QuestionOptions)
+                .FirstOrDefaultAsync(q => q.Id == questionId);
+
+            if (question == null)
+                return null;
+
+            // Ordenar opções baseado no tipo
+            List<QuestionOption> orderedOptions;
+            
+            if (question.Type.Name.Equals("true_false", StringComparison.OrdinalIgnoreCase))
+            {
+                // True/False: True primeiro, False segundo
+                orderedOptions = question.QuestionOptions
+                    .OrderByDescending(o => o.OptionText.Equals("True", StringComparison.OrdinalIgnoreCase) || 
+                                           o.OptionText.Equals("Verdadeiro", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            else if (question.Type.Name.Equals("ordering", StringComparison.OrdinalIgnoreCase))
+            {
+                // Ordering: ordenar por correctOrder
+                orderedOptions = question.QuestionOptions
+                    .OrderBy(o => o.CorrectOrder ?? int.MaxValue)
+                    .ToList();
+            }
+            else
+            {
+                // Multiple choice: manter ordem de inserção
+                orderedOptions = question.QuestionOptions
+                    .OrderBy(o => o.Id)
+                    .ToList();
+            }
+
+            return [.. orderedOptions.Select(o => new QuestionOptionResponseDto
+            {
+                Id = o.Id,
+                OptionText = o.OptionText,
+                IsCorrect = o.IsCorrect ?? false,
+                CorrectOrder = o.CorrectOrder
+            })];
+        }
+
+        // -------------------------------------------------------
         // UPDATE
         // -------------------------------------------------------
         public async Task<QuestionDto?> UpdateQuestion(

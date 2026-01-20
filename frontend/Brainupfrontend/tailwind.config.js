@@ -18,6 +18,7 @@ export default {
         'float': 'float 6s ease-in-out infinite',
         'scale-in': 'scaleIn 0.5s ease-out forwards',
         'shimmer': 'shimmer 2s linear infinite',
+        modalEnter: "modalEnter 0.5s ease-out forwards",
       },
       keyframes: {
         fadeIn: {
@@ -65,6 +66,10 @@ export default {
           '0%': { backgroundPosition: '-200% center' },
           '100%': { backgroundPosition: '200% center' },
         },
+        modalEnter: {
+          "0%": { opacity: "0", transform: "scale(0.9) translateY(20px)" },
+          "100%": { opacity: "1", transform: "scale(1) translateY(0)" },
+        }
       },
       transitionTimingFunction: {
         'bounce-in': 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
