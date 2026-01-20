@@ -2,6 +2,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthGuard } from "../hooks/useAuthGuard";
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
+  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line 
+} from 'recharts';
 
 interface Folder {
   id: string;
@@ -135,10 +139,11 @@ const DashboardPage: FC = () => {
   // Session history states
   const [sessions, setSessions] = useState<GameSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<GameSession | null>(null);
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
+
+  const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6'];
 
   useEffect(() => {
     fetchFolders();
@@ -688,143 +693,333 @@ const DashboardPage: FC = () => {
       {/* Stats Modal */}
       {showStatsModal && sessionStats && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-2xl font-bold">Estatísticas da Sessão</h3>
-                <p className="text-sm text-white/70 mt-1">
-                  {new Date(sessionStats.startedAt).toLocaleDateString('pt-PT')} às{' '}
-                  {new Date(sessionStats.startedAt).toLocaleTimeString('pt-PT')}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowStatsModal(false);
-                  setSessionStats(null);
-                }}
-                className="rounded-xl bg-white/20 p-2 transition hover:bg-white/30"
-              >
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* General Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="rounded-2xl bg-white/10 p-4 text-center">
-                <div className="text-3xl font-black">{sessionStats.totalPlayers}</div>
-                <div className="text-sm text-white/70">Jogadores</div>
-              </div>
-              <div className="rounded-2xl bg-white/10 p-4 text-center">
-                <div className="text-3xl font-black">{sessionStats.totalRounds}</div>
-                <div className="text-sm text-white/70">Rondas</div>
-              </div>
-              <div className="rounded-2xl bg-white/10 p-4 text-center">
-                <div className="text-3xl font-black">{sessionStats.averageAccuracy.toFixed(1)}%</div>
-                <div className="text-sm text-white/70">Precisão Média</div>
-              </div>
-              <div className="rounded-2xl bg-white/10 p-4 text-center">
-                <div className="text-3xl font-black">{formatDuration(sessionStats.durationSeconds)}</div>
-                <div className="text-sm text-white/70">Duração</div>
+          <div className="w-full max-w-7xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 bg-gradient-to-br from-purple-600 to-indigo-600 shadow-2xl">
+            {/* Sticky Header */}
+            <div className="sticky top-0 z-10 bg-gradient-to-br from-purple-600 to-indigo-600 border-b border-white/20 p-6 rounded-t-3xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold">Estatísticas da Sessão</h3>
+                  <p className="text-sm text-white/70 mt-1">
+                    {new Date(sessionStats.startedAt).toLocaleDateString('pt-PT')} às{' '}
+                    {new Date(sessionStats.startedAt).toLocaleTimeString('pt-PT')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowStatsModal(false);
+                    setSessionStats(null);
+                  }}
+                  className="rounded-xl bg-white/20 p-2 transition hover:bg-white/30"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             </div>
 
-            {/* Players Table */}
-            <div className="mb-6">
-              <h4 className="text-lg font-bold mb-3">Jogadores</h4>
-              <div className="rounded-2xl bg-white/5 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-white/10">
-                      <tr>
-                        <th className="px-4 py-3 text-left">Rank</th>
-                        <th className="px-4 py-3 text-left">Nome</th>
-                        <th className="px-4 py-3 text-right">Pontuação</th>
-                        <th className="px-4 py-3 text-right">Respostas</th>
-                        <th className="px-4 py-3 text-right">Corretas</th>
-                        <th className="px-4 py-3 text-right">Precisão</th>
-                        <th className="px-4 py-3 text-right">Tempo Médio</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sessionStats.players.map((player, index) => (
-                        <tr key={player.playerId} className={index % 2 === 0 ? 'bg-white/5' : ''}>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                              player.rank === 1 ? 'bg-yellow-500 text-white' :
-                              player.rank === 2 ? 'bg-gray-400 text-white' :
-                              player.rank === 3 ? 'bg-amber-600 text-white' :
-                              'bg-white/20'
-                            }`}>
-                              {player.rank}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-semibold">{player.playerName}</td>
-                          <td className="px-4 py-3 text-right font-bold">{player.totalScore}</td>
-                          <td className="px-4 py-3 text-right">{player.totalAnswers}</td>
-                          <td className="px-4 py-3 text-right text-green-300">{player.correctAnswers}</td>
-                          <td className="px-4 py-3 text-right">{player.accuracy.toFixed(1)}%</td>
-                          <td className="px-4 py-3 text-right">{player.averageResponseTimeSeconds.toFixed(2)}s</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {/* Content */}
+            <div className="p-6">
+              {/* General Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="rounded-2xl bg-white/10 p-4 text-center backdrop-blur-sm">
+                  <div className="text-3xl font-black">{sessionStats.totalPlayers}</div>
+                  <div className="text-sm text-white/70">Jogadores</div>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-4 text-center backdrop-blur-sm">
+                  <div className="text-3xl font-black">{sessionStats.totalRounds}</div>
+                  <div className="text-sm text-white/70">Rondas</div>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-4 text-center backdrop-blur-sm">
+                  <div className="text-3xl font-black">{sessionStats.averageAccuracy.toFixed(1)}%</div>
+                  <div className="text-sm text-white/70">Precisão Média</div>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-4 text-center backdrop-blur-sm">
+                  <div className="text-3xl font-black">{formatDuration(sessionStats.durationSeconds)}</div>
+                  <div className="text-sm text-white/70">Duração</div>
                 </div>
               </div>
-            </div>
 
-            {/* Rounds Table */}
-            <div className="mb-6">
-              <h4 className="text-lg font-bold mb-3">Rondas</h4>
-              <div className="rounded-2xl bg-white/5 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-white/10">
-                      <tr>
-                        <th className="px-4 py-3 text-left">Ronda</th>
-                        <th className="px-4 py-3 text-right">Respostas</th>
-                        <th className="px-4 py-3 text-right">Corretas</th>
-                        <th className="px-4 py-3 text-right">Precisão</th>
-                        <th className="px-4 py-3 text-right">Tempo Médio</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sessionStats.rounds.map((round, index) => (
-                        <tr key={round.roundId} className={index % 2 === 0 ? 'bg-white/5' : ''}>
-                          <td className="px-4 py-3 font-semibold">Ronda {round.roundNumber}</td>
-                          <td className="px-4 py-3 text-right">{round.totalAnswers}</td>
-                          <td className="px-4 py-3 text-right text-green-300">{round.correctAnswers}</td>
-                          <td className="px-4 py-3 text-right">{round.accuracy.toFixed(1)}%</td>
-                          <td className="px-4 py-3 text-right">{round.averageResponseTimeSeconds.toFixed(2)}s</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {/* Charts Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Performance by Round */}
+                <div className="rounded-2xl bg-white/5 p-6 backdrop-blur-sm">
+                  <h4 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Performance por Ronda
+                  </h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={sessionStats.rounds.map(r => ({
+                      name: `R${r.roundNumber}`,
+                      precisão: parseFloat(r.accuracy.toFixed(1)),
+                      tempo: parseFloat(r.averageResponseTimeSeconds.toFixed(1))
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                      <XAxis dataKey="name" stroke="#ffffff80" />
+                      <YAxis yAxisId="left" stroke="#10b981" />
+                      <YAxis yAxisId="right" orientation="right" stroke="#f59e0b" />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1e1b4b', 
+                          border: '1px solid #ffffff20',
+                          borderRadius: '8px'
+                        }} 
+                      />
+                      <Legend />
+                      <Line 
+                        yAxisId="left"
+                        type="monotone" 
+                        dataKey="precisão" 
+                        stroke="#10b981" 
+                        strokeWidth={2}
+                        name="Precisão (%)"
+                      />
+                      <Line 
+                        yAxisId="right"
+                        type="monotone" 
+                        dataKey="tempo" 
+                        stroke="#f59e0b" 
+                        strokeWidth={2}
+                        name="Tempo Médio (s)"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Player Distribution */}
+                <div className="rounded-2xl bg-white/5 p-6 backdrop-blur-sm">
+                  <h4 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                    </svg>
+                    Distribuição de Respostas Corretas
+                  </h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={sessionStats.players.map((p, i) => ({
+                          name: p.playerName,
+                          value: p.correctAnswers
+                        }))}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={(entry) => `${entry.name}: ${entry.value}`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {sessionStats.players.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1e1b4b', 
+                          border: '1px solid #ffffff20',
+                          borderRadius: '8px'
+                        }} 
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Top Players Chart */}
+                <div className="rounded-2xl bg-white/5 p-6 backdrop-blur-sm">
+                  <h4 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <svg className="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                    Pontuações dos Jogadores
+                  </h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart 
+                      data={sessionStats.players.slice(0, 5).map(p => ({
+                        name: p.playerName.length > 10 ? p.playerName.substring(0, 10) + '...' : p.playerName,
+                        pontos: p.totalScore
+                      }))}
+                      margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="#ffffff80"
+                        tick={{ fill: '#ffffff80', fontSize: 12 }}
+                      />
+                      <YAxis 
+                        stroke="#ffffff80"
+                        tick={{ fill: '#ffffff80', fontSize: 12 }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1e1b4b', 
+                          border: '1px solid #ffffff20',
+                          borderRadius: '8px',
+                          fontSize: '12px'
+                        }} 
+                      />
+                      <Bar 
+                        dataKey="pontos" 
+                        fill="#fbbf24" 
+                        name="Pontuação"
+                        radius={[8, 8, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Accuracy Comparison */}
+                <div className="rounded-2xl bg-white/5 p-6 backdrop-blur-sm">
+                  <h4 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <svg className="h-5 w-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    Precisão por Jogador
+                  </h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart 
+                      data={sessionStats.players.map(p => ({
+                        name: p.playerName.length > 10 ? p.playerName.substring(0, 10) + '...' : p.playerName,
+                        precisão: parseFloat(p.accuracy.toFixed(1))
+                      }))}
+                      layout="vertical"
+                      margin={{ left: 20, right: 20, top: 5, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" horizontal={false} />
+                      <XAxis 
+                        type="number" 
+                        domain={[0, 100]} 
+                        stroke="#ffffff80"
+                        tick={{ fill: '#ffffff80', fontSize: 12 }}
+                      />
+                      <YAxis 
+                        type="category" 
+                        dataKey="name" 
+                        stroke="#ffffff80"
+                        width={80}
+                        tick={{ fill: '#ffffff80', fontSize: 12 }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1e1b4b', 
+                          border: '1px solid #ffffff20',
+                          borderRadius: '8px',
+                          fontSize: '12px'
+                        }}
+                        formatter={(value: number | undefined) => [`${value ?? 0}%`, 'Precisão']}
+                      />
+                      <Bar 
+                        dataKey="precisão" 
+                        fill="#8b5cf6" 
+                        name="Precisão (%)"
+                        radius={[0, 8, 8, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
-            </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={exportToCSV}
-                className="rounded-xl bg-green-500 px-6 py-3 font-semibold text-white transition hover:bg-green-600 flex items-center gap-2"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Exportar CSV
-              </button>
-              <button
-                onClick={() => {
-                  setShowStatsModal(false);
-                  setSessionStats(null);
-                }}
-                className="rounded-xl border border-white/40 px-6 py-3 font-semibold transition hover:bg-white/10"
-              >
-                Fechar
-              </button>
+              {/* Players Table */}
+              <div className="mb-6">
+                <h4 className="text-lg font-bold mb-3">Jogadores</h4>
+                <div className="rounded-2xl bg-white/5 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-white/10">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Rank</th>
+                          <th className="px-4 py-3 text-left">Nome</th>
+                          <th className="px-4 py-3 text-right">Pontuação</th>
+                          <th className="px-4 py-3 text-right">Respostas</th>
+                          <th className="px-4 py-3 text-right">Corretas</th>
+                          <th className="px-4 py-3 text-right">Precisão</th>
+                          <th className="px-4 py-3 text-right">Tempo Médio</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sessionStats.players.map((player, index) => (
+                          <tr key={player.playerId} className={index % 2 === 0 ? 'bg-white/5' : ''}>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                player.rank === 1 ? 'bg-yellow-500 text-white' :
+                                player.rank === 2 ? 'bg-gray-400 text-white' :
+                                player.rank === 3 ? 'bg-amber-600 text-white' :
+                                'bg-white/20'
+                              }`}>
+                                {player.rank}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-semibold">{player.playerName}</td>
+                            <td className="px-4 py-3 text-right font-bold">{player.totalScore}</td>
+                            <td className="px-4 py-3 text-right">{player.totalAnswers}</td>
+                            <td className="px-4 py-3 text-right text-green-300">{player.correctAnswers}</td>
+                            <td className="px-4 py-3 text-right">{player.accuracy.toFixed(1)}%</td>
+                            <td className="px-4 py-3 text-right">{player.averageResponseTimeSeconds.toFixed(2)}s</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rounds Table */}
+              <div className="mb-6">
+                <h4 className="text-lg font-bold mb-3">Rondas</h4>
+                <div className="rounded-2xl bg-white/5 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-white/10">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Ronda</th>
+                          <th className="px-4 py-3 text-right">Respostas</th>
+                          <th className="px-4 py-3 text-right">Corretas</th>
+                          <th className="px-4 py-3 text-right">Precisão</th>
+                          <th className="px-4 py-3 text-right">Tempo Médio</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sessionStats.rounds.map((round, index) => (
+                          <tr key={round.roundId} className={index % 2 === 0 ? 'bg-white/5' : ''}>
+                            <td className="px-4 py-3 font-semibold">Ronda {round.roundNumber}</td>
+                            <td className="px-4 py-3 text-right">{round.totalAnswers}</td>
+                            <td className="px-4 py-3 text-right text-green-300">{round.correctAnswers}</td>
+                            <td className="px-4 py-3 text-right">{round.accuracy.toFixed(1)}%</td>
+                            <td className="px-4 py-3 text-right">{round.averageResponseTimeSeconds.toFixed(2)}s</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions - Sticky Footer */}
+              <div className="sticky bottom-0 bg-gradient-to-br from-purple-600 to-indigo-600 border-t border-white/20 pt-4 -mx-6 px-6 -mb-6 pb-6 rounded-b-3xl">
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={exportToCSV}
+                    className="rounded-xl bg-green-500 px-6 py-3 font-semibold text-white transition hover:bg-green-600 flex items-center gap-2"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Exportar CSV
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowStatsModal(false);
+                      setSessionStats(null);
+                    }}
+                    className="rounded-xl border border-white/40 px-6 py-3 font-semibold transition hover:bg-white/10"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1028,7 +1223,7 @@ const DashboardPage: FC = () => {
       )}
 
       <div className="flex min-h-screen w-full gap-6 px-4 py-8">
-        <aside className="w-72 shrink-0 rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl flex flex-col">
+        <aside className="w-72 h-fit shrink-0 sticky top-8 rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-md shadow-2xl flex flex-col">
           <div className="mb-8">
             <div className="text-xs uppercase tracking-[0.3em] text-white/60">
               BrainUp
