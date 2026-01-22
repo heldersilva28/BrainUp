@@ -918,7 +918,7 @@ const PlayerSessionPage: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Buscar leaderboard atualizado com retry logic
-        await fetchRoundLeaderboard();
+        //await fetchRoundLeaderboard();
 
         // Mudar para estado de espera (não mostrar feedback ainda)
         setSessionStatus('waiting-next');
