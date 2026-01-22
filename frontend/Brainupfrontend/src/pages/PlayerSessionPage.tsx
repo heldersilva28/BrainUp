@@ -995,7 +995,8 @@ const PlayerSessionPage: React.FC = () => {
         <div className="grid grid-cols-2 gap-4 md:gap-6">
           {trueFalseOptions.map(option => {
             const isSelected = selectedAnswer === option.id;
-            const isTrue = option.text.trim().toLowerCase() === 'verdadeiro';
+            const optionText = option.text.trim().toLowerCase();
+            const isTrue = optionText === 'verdadeiro' || optionText === 'true';
 
             return (
               <button
