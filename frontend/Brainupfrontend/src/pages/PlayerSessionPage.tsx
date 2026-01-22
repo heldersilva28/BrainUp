@@ -71,6 +71,8 @@ const PlayerSessionPage: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected');
   const maxReconnectAttempts = 5;
 
+  const [isFinalLeaderboardReady, setIsFinalLeaderboardReady] = useState(false);
+
   /* =====================================================
      TIMER
   ====================================================== */
@@ -514,7 +516,10 @@ const PlayerSessionPage: React.FC = () => {
 
       newConnection.on('roundstarted', async (roundData: any) => {
         console.log('📝 Round started:', roundData);
-
+        
+        setIsFinalLeaderboardReady(false);
+        setTopLeaderboard([]);
+        
         // Clear any saved state when a new round starts
         localStorage.removeItem('brainup_player_state');
 
@@ -622,6 +627,8 @@ const PlayerSessionPage: React.FC = () => {
 
         // Buscar leaderboard atualizado com retry logic
         await fetchRoundLeaderboard();
+
+        setIsFinalLeaderboardReady(true);
 
         setSessionStatus('round-results');
       });
@@ -914,11 +921,19 @@ const PlayerSessionPage: React.FC = () => {
         });
 
         // Aguardar 1 segundo para dar tempo ao backend processar
-        console.log('⏳ Waiting 1s before fetching leaderboard...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        //console.log('⏳ Waiting 1s before fetching leaderboard...');
+        //await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Buscar leaderboard atualizado com retry logic
         //await fetchRoundLeaderboard();
+        setPlayerLeaderboard(prev => {
+          const currentScore = prev?.score ?? 0;
+          return {
+            playerName: playerData.playerName,
+            score: currentScore + earnedPoints,
+            rank: prev?.rank ?? 0, // rank provisório
+          };
+        });
 
         // Mudar para estado de espera (não mostrar feedback ainda)
         setSessionStatus('waiting-next');
@@ -1472,7 +1487,7 @@ const PlayerSessionPage: React.FC = () => {
               )}
 
               {/* Top 3 */}
-              {topLeaderboard.length > 0 && (
+              {isFinalLeaderboardReady && topLeaderboard.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-base md:text-lg font-black mb-3 text-center text-white/90 flex items-center justify-center gap-2">
                   <span className="text-2xl">🥇</span>
