@@ -916,8 +916,8 @@ const PlayerSessionPage: React.FC = () => {
         });
 
         // Aguardar 1 segundo para dar tempo ao backend processar
-        //console.log('⏳ Waiting 1s before fetching leaderboard...');
-        //await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('⏳ Waiting 1s before fetching leaderboard...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Buscar leaderboard atualizado com retry logic
         await fetchRoundLeaderboard();
