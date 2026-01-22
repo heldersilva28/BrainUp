@@ -118,7 +118,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins("https://brainup-o6cu.onrender.com")
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
