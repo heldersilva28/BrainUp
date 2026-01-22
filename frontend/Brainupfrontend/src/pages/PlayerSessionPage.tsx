@@ -616,10 +616,11 @@ const PlayerSessionPage: React.FC = () => {
         // Clear saved state when round ends
         localStorage.removeItem('brainup_player_state');
 
-        // Aguardar um pouco para garantir que os dados foram processados no backend
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Aguardar 2 segundos para garantir que os dados foram processados no backend
+        console.log('⏳ Waiting 2s before fetching final leaderboard...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Buscar leaderboard atualizado
+        // Buscar leaderboard atualizado com retry logic
         await fetchRoundLeaderboard();
 
         setSessionStatus('round-results');
@@ -712,7 +713,7 @@ const PlayerSessionPage: React.FC = () => {
   /* =====================================================
      FETCH LEADERBOARD
   ====================================================== */
-  const fetchRoundLeaderboard = async () => {
+  const fetchRoundLeaderboard = async (retryCount = 0, maxRetries = 3) => {
     const targetSessionId = playerData?.sessionId || confirmedSessionId || sessionCode;
     if (!targetSessionId || !playerData?.playerId) {
       console.log('⚠️ Missing data for leaderboard fetch:', { targetSessionId, playerId: playerData?.playerId });
@@ -720,11 +721,18 @@ const PlayerSessionPage: React.FC = () => {
     }
 
     try {
-      console.log('📊 Fetching leaderboard for session:', targetSessionId);
+      console.log(`📊 [Attempt ${retryCount + 1}/${maxRetries + 1}] Fetching leaderboard for session:`, targetSessionId);
 
       const res = await fetch(`${apiBaseUrl}/api/GameSession/${targetSessionId}/leaderboard`);
       if (!res.ok) {
         console.error('❌ Leaderboard fetch failed:', res.status, res.statusText);
+        
+        // Retry if not the last attempt
+        if (retryCount < maxRetries) {
+          console.log(`🔄 Retrying in ${(retryCount + 1) * 500}ms...`);
+          await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 500));
+          return fetchRoundLeaderboard(retryCount + 1, maxRetries);
+        }
         return;
       }
 
@@ -747,6 +755,18 @@ const PlayerSessionPage: React.FC = () => {
         : [];
 
       console.log('📊 Processed entries:', entries);
+
+      // Verificar se temos dados válidos
+      if (entries.length === 0) {
+        console.warn('⚠️ Leaderboard está vazio');
+        
+        // Retry if not the last attempt
+        if (retryCount < maxRetries) {
+          console.log(`🔄 Retrying in ${(retryCount + 1) * 500}ms...`);
+          await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 500));
+          return fetchRoundLeaderboard(retryCount + 1, maxRetries);
+        }
+      }
 
       // Encontrar jogador atual (case-insensitive) em toda a lista
       const currentPlayerName = playerData.playerName.toLowerCase().trim();
@@ -776,6 +796,13 @@ const PlayerSessionPage: React.FC = () => {
       setTopLeaderboard(entries.slice(0, 3));
     } catch (err) {
       console.error('❌ Erro ao carregar leaderboard:', err);
+
+      // Retry if not the last attempt
+      if (retryCount < maxRetries) {
+        console.log(`🔄 Retrying in ${(retryCount + 1) * 500}ms...`);
+        await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 500));
+        return fetchRoundLeaderboard(retryCount + 1, maxRetries);
+      }
 
       // Fallback em caso de erro
       if (playerData.playerName) {
@@ -886,7 +913,11 @@ const PlayerSessionPage: React.FC = () => {
           earnedPoints
         });
 
-        // Buscar leaderboard atualizado imediatamente
+        // Aguardar 1 segundo para dar tempo ao backend processar
+        console.log('⏳ Waiting 1s before fetching leaderboard...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Buscar leaderboard atualizado com retry logic
         await fetchRoundLeaderboard();
 
         // Mudar para estado de espera (não mostrar feedback ainda)
@@ -1193,36 +1224,36 @@ const PlayerSessionPage: React.FC = () => {
 
         {sessionStatus === 'waiting' && (
           <div className="text-center animate-fadeIn">
-            <div className="text-7xl md:text-8xl mb-8 animate-pulse drop-shadow-2xl">🧠</div>
-            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-8 md:p-10 shadow-2xl max-w-lg mx-auto">
-              <h1 className="text-3xl md:text-4xl font-black mb-4 bg-gradient-to-r from-yellow-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+            <div className="text-5xl md:text-7xl mb-6 animate-pulse drop-shadow-2xl">🧠</div>
+            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-6 md:p-8 shadow-2xl max-w-lg mx-auto">
+              <h1 className="text-2xl md:text-3xl font-black mb-3 bg-gradient-to-r from-yellow-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
                 A aguardar início...
               </h1>
-              <p className="text-gray-300 text-base md:text-lg">O anfitrião vai começar em breve</p>
+              <p className="text-gray-300 text-sm md:text-base">O anfitrião vai começar em breve</p>
             </div>
           </div>
         )}
 
         {sessionStatus === 'waiting-next' && (
           <div className="text-center animate-fadeIn">
-            <div className="text-7xl md:text-8xl mb-8 animate-bounce drop-shadow-2xl">⏳</div>
-            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-8 md:p-10 shadow-2xl max-w-lg mx-auto">
-              <h1 className="text-3xl md:text-4xl font-black mb-4 bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+            <div className="text-5xl md:text-7xl mb-6 animate-bounce drop-shadow-2xl">⏳</div>
+            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-6 md:p-8 shadow-2xl max-w-lg mx-auto">
+              <h1 className="text-2xl md:text-3xl font-black mb-3 bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
                 Resposta enviada!
               </h1>
-              <p className="text-gray-300 text-base md:text-lg">A aguardar outros jogadores...</p>
+              <p className="text-gray-300 text-sm md:text-base">A aguardar outros jogadores...</p>
             </div>
           </div>
         )}
 
         {sessionStatus === 'finished' && (
           <div className="text-center animate-fadeIn">
-            <div className="text-7xl md:text-8xl mb-8 drop-shadow-2xl">🎉</div>
-            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-8 md:p-10 shadow-2xl max-w-lg mx-auto">
-              <h1 className="text-4xl md:text-5xl font-black mb-4 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 bg-clip-text text-transparent">
+            <div className="text-5xl md:text-7xl mb-6 drop-shadow-2xl">🎉</div>
+            <div className="bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-6 md:p-8 shadow-2xl max-w-lg mx-auto">
+              <h1 className="text-2xl md:text-4xl font-black mb-3 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 bg-clip-text text-transparent">
                 Quiz Terminado!
               </h1>
-              <p className="text-gray-300 text-base md:text-lg mb-8">Obrigado por jogares</p>
+              <p className="text-gray-300 text-sm md:text-base mb-6">Obrigado por jogares</p>
 
               <button
                 onClick={() => {
@@ -1233,7 +1264,7 @@ const PlayerSessionPage: React.FC = () => {
                 }}
                 className="
                   rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 
-                  px-8 py-3 text-lg font-bold text-white 
+                  px-6 py-2.5 text-base font-bold text-white 
                   shadow-lg hover:scale-105 active:scale-95 
                   transition-all duration-300
                 "
@@ -1247,18 +1278,18 @@ const PlayerSessionPage: React.FC = () => {
         {sessionStatus === 'question' && currentQuestion && (
           <div className="max-w-4xl w-full animate-fadeIn">
             {/* Header Card */}
-            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-5 md:p-7 mb-5 md:mb-6 border border-white/20 shadow-2xl">
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl px-4 py-2 shadow-lg">
-                    <span className="text-sm md:text-base font-bold text-white">
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-2xl p-3 md:p-5 mb-3 md:mb-4 border border-white/20 shadow-2xl">
+              <div className="flex justify-between items-center mb-2 md:mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg px-3 py-1.5 shadow-lg">
+                    <span className="text-xs md:text-sm font-bold text-white">
                       Pergunta {roundNumber}
                     </span>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className={`
-                    text-4xl md:text-5xl font-black transition-all duration-300
+                    text-3xl md:text-4xl font-black transition-all duration-300
                     ${timeLeft <= 5
                       ? 'text-red-400 animate-pulse scale-110 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]'
                       : 'text-yellow-400 drop-shadow-lg'
@@ -1270,7 +1301,7 @@ const PlayerSessionPage: React.FC = () => {
               </div>
 
               {/* Progress Bar */}
-              <div className="relative w-full bg-black/20 rounded-full h-3 overflow-hidden shadow-inner">
+              <div className="relative w-full bg-black/20 rounded-full h-2 md:h-2.5 overflow-hidden shadow-inner">
                 <div
                   className={`
                     absolute top-0 left-0 h-full rounded-full
@@ -1288,17 +1319,16 @@ const PlayerSessionPage: React.FC = () => {
             </div>
 
             {/* Question Card */}
-            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-7 md:p-10 mb-5 md:mb-6 border border-white/20 shadow-2xl">
-              <div className="flex items-start gap-4 mb-6">
-                <div className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-xl">
-                  <span className="text-2xl md:text-3xl">❓</span>
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-2xl p-4 md:p-6 mb-3 md:mb-4 border border-white/20 shadow-2xl">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-xl">
+                  <span className="text-xl md:text-2xl">❓</span>
                 </div>
-                <h2 className="text-xl md:text-2xl lg:text-3xl font-bold leading-relaxed flex-1">
+                <h2 className="text-base md:text-xl lg:text-2xl font-bold leading-snug flex-1">
                   {currentQuestion?.title}
                 </h2>
               </div>
             </div>
-
 
             {/* Options */}
             {renderQuestion()}
@@ -1308,10 +1338,10 @@ const PlayerSessionPage: React.FC = () => {
               <button
                 onClick={submitAnswer}
                 className="
-                  mt-6 w-full
+                  mt-4 w-full
                   bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500
-                  p-5 md:p-6 rounded-2xl
-                  font-black text-xl md:text-2xl text-white
+                  p-3.5 md:p-4 rounded-xl
+                  font-black text-base md:text-lg text-white
                   shadow-2xl shadow-yellow-500/50
                   hover:shadow-yellow-500/70 hover:scale-[1.02]
                   active:scale-95
@@ -1320,18 +1350,18 @@ const PlayerSessionPage: React.FC = () => {
                   animate-pulse
                 "
               >
-                <span className="flex items-center justify-center gap-3">
+                <span className="flex items-center justify-center gap-2">
                   <span>Confirmar Resposta</span>
-                  <span className="text-3xl">✓</span>
+                  <span className="text-2xl">✓</span>
                 </span>
               </button>
             )}
             {/* Answer Submitted */}
             {hasAnswered && (
-              <div className="mt-6 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/50 rounded-2xl p-5 backdrop-blur-sm shadow-xl">
-                <div className="flex items-center justify-center gap-3">
-                  <span className="text-3xl animate-bounce">✓</span>
-                  <span className="text-green-300 text-lg md:text-xl font-bold">
+              <div className="mt-4 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/50 rounded-xl p-3.5 backdrop-blur-sm shadow-xl">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-2xl animate-bounce">✓</span>
+                  <span className="text-green-300 text-sm md:text-base font-bold">
                     Resposta enviada com sucesso!
                   </span>
                 </div>
@@ -1342,11 +1372,11 @@ const PlayerSessionPage: React.FC = () => {
 
         {/* Round Results */}
         {sessionStatus === 'round-results' && (
-          <div className="max-w-3xl w-full animate-fadeIn">
-            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-3xl p-6 md:p-10 border border-white/20 shadow-2xl">
-              <div className="text-center mb-8 md:mb-10">
-                <div className="text-6xl md:text-7xl mb-6 drop-shadow-2xl animate-bounce">🏆</div>
-                <h2 className="text-3xl md:text-4xl font-black mb-2 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 bg-clip-text text-transparent">
+          <div className="max-w-3xl w-full animate-fadeIn overflow-y-auto max-h-screen py-4">
+            <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-2xl p-4 md:p-6 border border-white/20 shadow-2xl">
+              <div className="text-center mb-4 md:mb-6">
+                <div className="text-4xl md:text-5xl mb-3 drop-shadow-2xl animate-bounce">🏆</div>
+                <h2 className="text-xl md:text-2xl font-black mb-2 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 bg-clip-text text-transparent">
                   Resultados da Ronda
                 </h2>
               </div>
@@ -1354,20 +1384,20 @@ const PlayerSessionPage: React.FC = () => {
               {/* Answer Result */}
               {answerResult && (
                 <div className={`
-                  mb-8 rounded-3xl p-7 md:p-9 border-2 shadow-2xl backdrop-blur-sm
+                  mb-4 rounded-2xl p-4 md:p-5 border-2 shadow-2xl backdrop-blur-sm
                   ${answerResult.isCorrect
                     ? 'bg-gradient-to-br from-green-500/30 to-emerald-600/20 border-green-400/50'
                     : 'bg-gradient-to-br from-red-500/30 to-rose-600/20 border-red-400/50'
                   }
                 `}>
-                  <div className="flex flex-col gap-5">
-                    <div className="flex items-center justify-center gap-5">
-                      <span className="text-7xl md:text-8xl drop-shadow-2xl">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-center gap-3">
+                      <span className="text-4xl md:text-5xl drop-shadow-2xl">
                         {answerResult.isCorrect ? '✓' : '✗'}
                       </span>
                       <div className="text-center">
                         <div className={`
-                          text-3xl md:text-4xl font-black mb-2
+                          text-xl md:text-2xl font-black mb-1
                           ${answerResult.isCorrect ? 'text-green-200' : 'text-red-200'}
                         `}>
                           {answerResult.isCorrect ? 'Correto!' : 'Incorreto'}
@@ -1376,23 +1406,23 @@ const PlayerSessionPage: React.FC = () => {
                     </div>
 
                     {/* Points Summary */}
-                    <div className="grid grid-cols-2 gap-5 pt-5 border-t-2 border-white/20">
-                      <div className="text-center bg-black/20 rounded-2xl p-5 backdrop-blur-sm">
-                        <div className="text-sm md:text-base text-white/70 mb-2 font-semibold">
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t-2 border-white/20">
+                      <div className="text-center bg-black/20 rounded-xl p-3 backdrop-blur-sm">
+                        <div className="text-xs md:text-sm text-white/70 mb-1 font-semibold">
                           Pontos desta ronda
                         </div>
                         <div className={`
-                          text-3xl md:text-4xl font-black drop-shadow-lg
+                          text-2xl md:text-3xl font-black drop-shadow-lg
                           ${answerResult.isCorrect ? 'text-green-300' : 'text-red-300'}
                         `}>
                           +{answerResult.earnedPoints}
                         </div>
                       </div>
-                      <div className="text-center bg-black/20 rounded-2xl p-5 backdrop-blur-sm">
-                        <div className="text-sm md:text-base text-white/70 mb-2 font-semibold">
+                      <div className="text-center bg-black/20 rounded-xl p-3 backdrop-blur-sm">
+                        <div className="text-xs md:text-sm text-white/70 mb-1 font-semibold">
                           Pontos totais
                         </div>
-                        <div className="text-3xl md:text-4xl font-black text-yellow-300 drop-shadow-lg">
+                        <div className="text-2xl md:text-3xl font-black text-yellow-300 drop-shadow-lg">
                           {playerLeaderboard?.score || 0}
                         </div>
                       </div>
@@ -1404,7 +1434,7 @@ const PlayerSessionPage: React.FC = () => {
               {/* Player Position */}
               {playerLeaderboard && (
                 <div className={`
-                  mb-8 rounded-3xl p-7 md:p-9 border-2 shadow-2xl backdrop-blur-sm
+                  mb-4 rounded-2xl p-4 md:p-5 border-2 shadow-2xl backdrop-blur-sm
                   ${playerLeaderboard.rank === 1
                     ? 'bg-gradient-to-br from-yellow-400/40 to-yellow-600/20 border-yellow-400/60'
                     : playerLeaderboard.rank === 2
@@ -1415,27 +1445,27 @@ const PlayerSessionPage: React.FC = () => {
                   }
                 `}>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-5">
+                    <div className="flex items-center gap-3">
                       <div className={`
-                        text-5xl md:text-6xl font-black drop-shadow-2xl
+                        text-3xl md:text-4xl font-black drop-shadow-2xl
                         ${playerLeaderboard.rank <= 3 ? 'text-white' : 'text-white/70'}
                       `}>
                         #{playerLeaderboard.rank}
                       </div>
                       <div>
-                        <div className="text-base md:text-lg font-semibold text-white/80 mb-1">
+                        <div className="text-xs md:text-sm font-semibold text-white/80 mb-0.5">
                           A tua posição
                         </div>
-                        <div className="text-2xl md:text-3xl font-black text-white drop-shadow-lg">
+                        <div className="text-base md:text-xl font-black text-white drop-shadow-lg">
                           {playerData.playerName}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-4xl md:text-5xl font-black text-yellow-300 drop-shadow-lg">
+                      <div className="text-2xl md:text-3xl font-black text-yellow-300 drop-shadow-lg">
                         {playerLeaderboard.score}
                       </div>
-                      <div className="text-xs md:text-sm text-white/60 font-semibold">pontos</div>
+                      <div className="text-xs text-white/60 font-semibold">pontos</div>
                     </div>
                   </div>
                 </div>
@@ -1443,18 +1473,18 @@ const PlayerSessionPage: React.FC = () => {
 
               {/* Top 3 */}
               {topLeaderboard.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-xl md:text-2xl font-black mb-5 text-center text-white/90 flex items-center justify-center gap-2">
-                  <span className="text-3xl">🥇</span>
+              <div className="mb-4">
+                <h3 className="text-base md:text-lg font-black mb-3 text-center text-white/90 flex items-center justify-center gap-2">
+                  <span className="text-2xl">🥇</span>
                   <span>Top 3</span>
                 </h3>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {topLeaderboard.map((entry, index) => (
                     <div
                       key={index}
                       className={`
-                        flex items-center justify-between rounded-2xl p-5 backdrop-blur-sm
+                        flex items-center justify-between rounded-xl p-3 backdrop-blur-sm
                         ${index === 0
                           ? 'bg-gradient-to-r from-yellow-400/30 to-yellow-600/20 border-2 border-yellow-400/60'
                           : index === 1
@@ -1463,16 +1493,16 @@ const PlayerSessionPage: React.FC = () => {
                         }
                       `}
                     >
-                      <div className="flex items-center gap-4">
-                        <span className="text-3xl md:text-4xl drop-shadow-lg">
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <span className="text-2xl md:text-3xl drop-shadow-lg">
                           {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
                         </span>
-                        <span className="font-bold text-base md:text-lg">
+                        <span className="font-bold text-sm md:text-base">
                           {entry.playerName}
                         </span>
                       </div>
 
-                      <span className="text-xl md:text-2xl font-black">
+                      <span className="text-lg md:text-xl font-black">
                         {entry.score}
                       </span>
                     </div>
@@ -1481,8 +1511,7 @@ const PlayerSessionPage: React.FC = () => {
               </div>
             )}
 
-
-            <div className="text-center text-white/60 text-base md:text-lg animate-pulse font-semibold">
+            <div className="text-center text-white/60 text-xs md:text-sm animate-pulse font-semibold">
               ⏳ A aguardar próxima pergunta...
             </div>
 
