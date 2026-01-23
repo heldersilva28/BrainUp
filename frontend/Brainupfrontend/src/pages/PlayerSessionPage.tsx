@@ -617,14 +617,20 @@ const PlayerSessionPage: React.FC = () => {
 
         // Clear saved state when round ends
         localStorage.removeItem('brainup_player_state');
-
-        // Aguardar 2 segundos para garantir que os dados foram processados no backend
-        console.log('⏳ Waiting 2s before fetching final leaderboard...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Buscar leaderboard atualizado com retry logic
-        await fetchRoundLeaderboard();
-
+        
+        // Aguardar para garantir que todas as respostas foram processadas no backend
+        // Este delay é crítico para garantir que o último jogador tenha a sua pontuação guardada
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        // Buscar leaderboard atualizado com retry automático
+        const success = await fetchRoundLeaderboard();
+        
+        if (!success) {
+          console.warn('⚠️ Failed to fetch leaderboard, retrying in 500ms...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await fetchRoundLeaderboard();
+        }
+        
         setSessionStatus('round-results');
       });
 
@@ -715,71 +721,62 @@ const PlayerSessionPage: React.FC = () => {
   /* =====================================================
      FETCH LEADERBOARD
   ====================================================== */
-  const fetchRoundLeaderboard = async (retryCount = 0, maxRetries = 3) => {
+  const fetchRoundLeaderboard = async (retryCount = 0): Promise<boolean> => {
     const targetSessionId = playerData?.sessionId || confirmedSessionId || sessionCode;
     if (!targetSessionId || !playerData?.playerId) {
       console.log('⚠️ Missing data for leaderboard fetch:', { targetSessionId, playerId: playerData?.playerId });
-      return;
+      return false;
     }
 
     try {
-      console.log(`📊 [Attempt ${retryCount + 1}/${maxRetries + 1}] Fetching leaderboard for session:`, targetSessionId);
-
+      console.log(`📊 Fetching leaderboard for session: ${targetSessionId} (attempt ${retryCount + 1})`);
+      
       const res = await fetch(`${apiBaseUrl}/api/GameSession/${targetSessionId}/leaderboard`);
       if (!res.ok) {
         console.error('❌ Leaderboard fetch failed:', res.status, res.statusText);
         
-        // Retry if not the last attempt
-        if (retryCount < maxRetries) {
-          console.log(`🔄 Retrying in ${(retryCount + 1) * 500}ms...`);
-          await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 500));
-          return fetchRoundLeaderboard(retryCount + 1, maxRetries);
+        // Retry até 2 vezes
+        if (retryCount < 2) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          return fetchRoundLeaderboard(retryCount + 1);
         }
-        return;
+        return false;
       }
 
       const data = await res.json();
-      console.log('📊 Raw leaderboard data:', data);
+      console.log('📊 Raw leaderboard data from backend:', JSON.stringify(data, null, 2));
 
-      const entries: LeaderboardEntry[] = Array.isArray(data)
-        ? data.map((entry: any, index: number) => {
-            const playerName = entry?.player ?? entry?.Player ?? entry?.playerName ?? entry?.PlayerName ?? 'Jogador';
-            const score = Number(entry?.score ?? entry?.Score ?? entry?.totalScore ?? entry?.TotalScore ?? 0);
-
-            console.log(`  Player ${index + 1}:`, { playerName, score, raw: entry });
-
-            return {
-              playerName,
-              score,
-              rank: index + 1
-            };
-          })
-        : [];
-
-      console.log('📊 Processed entries:', entries);
-
-      // Verificar se temos dados válidos
-      if (entries.length === 0) {
-        console.warn('⚠️ Leaderboard está vazio');
-        
-        // Retry if not the last attempt
-        if (retryCount < maxRetries) {
-          console.log(`🔄 Retrying in ${(retryCount + 1) * 500}ms...`);
-          await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 500));
-          return fetchRoundLeaderboard(retryCount + 1, maxRetries);
-        }
+      if (!Array.isArray(data)) {
+        console.error('❌ Invalid leaderboard data format:', data);
+        return false;
       }
 
-      // Encontrar jogador atual (case-insensitive) em toda a lista
+      const entries: LeaderboardEntry[] = data.map((entry: any, index: number) => {
+        // Backend retorna { Player: "nome", Score: 100 }
+        const playerName = entry?.Player ?? entry?.player ?? entry?.PlayerName ?? entry?.playerName ?? 'Jogador';
+        const score = Number(entry?.Score ?? entry?.score ?? entry?.TotalScore ?? entry?.totalScore ?? 0);
+        
+        console.log(`  [${index + 1}] ${playerName}: ${score} pontos`);
+        
+        return {
+          playerName,
+          score,
+          rank: index + 1
+        };
+      });
+
+      console.log(`📊 Processed ${entries.length} leaderboard entries`);
+
+      // Encontrar jogador atual (case-insensitive)
       const currentPlayerName = playerData.playerName.toLowerCase().trim();
       const currentPlayer = entries.find(e =>
         e.playerName.toLowerCase().trim() === currentPlayerName
       );
 
-      console.log('👤 Current player:', {
-        searchName: currentPlayerName,
-        found: currentPlayer
-      });
+      console.log('👤 Current player position:', currentPlayer 
+        ? `#${currentPlayer.rank} with ${currentPlayer.score} points`
+        : 'Not found in leaderboard'
+      );
 
       // Se não encontrou o jogador, criar entrada com rank baseado no tamanho da lista
       if (!currentPlayer && playerData.playerName) {
@@ -796,25 +793,18 @@ const PlayerSessionPage: React.FC = () => {
 
       // Top 3 continua igual
       setTopLeaderboard(entries.slice(0, 3));
+      
+      return true;
     } catch (err) {
       console.error('❌ Erro ao carregar leaderboard:', err);
-
-      // Retry if not the last attempt
-      if (retryCount < maxRetries) {
-        console.log(`🔄 Retrying in ${(retryCount + 1) * 500}ms...`);
-        await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 500));
-        return fetchRoundLeaderboard(retryCount + 1, maxRetries);
+      
+      // Retry em caso de erro de rede
+      if (retryCount < 2) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        return fetchRoundLeaderboard(retryCount + 1);
       }
-
-      // Fallback em caso de erro
-      if (playerData.playerName) {
-        const fallbackPlayer: LeaderboardEntry = {
-          playerName: playerData.playerName,
-          score: 0,
-          rank: 1
-        };
-        setPlayerLeaderboard(fallbackPlayer);
-      }
+      
+      return false;
     }
   };
 
