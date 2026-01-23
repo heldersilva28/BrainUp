@@ -452,11 +452,15 @@ const QuizEditorPage: FC = () => {
                 >
                   {types.map((type) => (
                     <option key={type.id} value={type.id} className="bg-purple-900">
-                      if(type.id === 1) Multiple Choice
-                      {type.name}
-                      else if(type.id === 2) Verdadeiro/Falso
-                      else if(type.id === 3) Ordenação
+                      {type.id === 1
+                        ? "Escolha Múltipla"
+                        : type.id === 2
+                        ? "Verdadeiro/Falso"
+                        : type.id === 3
+                        ? "Ordenação"
+                        : type.name}
                     </option>
+
                   ))}
                 </select>
               </div>
